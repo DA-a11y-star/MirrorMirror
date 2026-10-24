@@ -8,7 +8,8 @@ const pose = o => !!o && typeof o.id === 'string' && finite(o.pos, 3) && finite(
 
 export function validState(msg) {
   if (!msg || msg.type !== 'state' || typeof msg.user !== 'string' || !Number.isFinite(msg.seq)) return false;
-  if (!msg.avatar || !finite(msg.avatar.pos, 3) || !finite(msg.avatar.quat, 4)) return false;
+  const a = msg.avatar; // the sender's avatar snapshot, as produced by Locomotion.state()
+  if (!a || !finite(a.pos, 3) || !finite(a.vel, 3) || !Number.isFinite(a.yaw) || !Number.isFinite(a.pitch) || typeof a.flying !== 'boolean') return false;
   if (msg.head != null && !finite(msg.head.quat, 4)) return false;
   if (msg.target != null && typeof msg.target !== 'string') return false;
   if (!Array.isArray(msg.hands) || msg.hands.length > 2) return false;

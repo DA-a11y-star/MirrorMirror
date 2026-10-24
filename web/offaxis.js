@@ -10,6 +10,8 @@ const FOLLOW_RATE = 14; // 1/s; eases ~20 Hz head updates into 60 fps motion
 const LOST_AFTER_MS = 500; // no head reading for this long: drift back to the base view
 const RETURN_RATE = 2.5; // 1/s
 const MAX_OFFSET = { lateral: 0.35, depth: 0.5 }; // real meters of head travel that still count
+const MIN_DISTANCE_FRACTION = 0.4; // the eye never gets closer to the window plane than this fraction of the focus distance
+const NEUTRAL_DRIFT_S = 25; // seconds; sitting closer or farther for a long time slowly becomes the new "centered" depth
 const NEAR = 0.05;
 const GAZE_REACH_M = 0.09; // equivalent real head travel when looking at a screen edge (0 = gaze has no effect)
 const GAZE_LOST_AFTER_MS = 400;
@@ -33,10 +35,14 @@ export function eyeOffset(delta, scale, out = new THREE.Vector3()) {
 
 // Off-axis perspective through the window rectangle. `halfW`/`halfH` are the window's half size at distance
 // `focus` in front of the base camera; `eye` is the viewpoint offset in the base camera's local axes.
+// Sideways and vertical offsets skew the view through the fixed window. Moving toward or away from the window is a
+// dolly: the field of view stays the same, so leaning in makes things look closer. (A true window would widen the
+// view as you lean in, which reads as the whole scene shrinking away, and does so faster the closer you get.)
 export function offAxisProjection(out, halfW, halfH, focus, eye, far) {
-  const distance = Math.max(focus + eye.z, NEAR * 4); // eye to window plane
+  const distance = Math.max(focus + eye.z, focus * MIN_DISTANCE_FRACTION, NEAR * 4); // eye to window plane
   const k = NEAR / distance;
-  return out.makePerspective((-halfW - eye.x) * k, (halfW - eye.x) * k, (halfH - eye.y) * k, (-halfH - eye.y) * k, NEAR, far);
+  const s = distance / focus; // keeps the angular size of the window constant
+  return out.makePerspective((-halfW * s - eye.x) * k, (halfW * s - eye.x) * k, (halfH * s - eye.y) * k, (-halfH * s - eye.y) * k, NEAR, far);
 }
 
 export class OffAxis {
@@ -92,11 +98,15 @@ export class OffAxis {
     this.gazeShift[1] += (g[1] - this.gazeShift[1]) * gk;
 
     const tracked = this.head && this.neutral && now - this.lastSeen < LOST_AFTER_MS;
+    // People drift toward the screen as they settle in. Let the depth reference follow slowly so that doesn't keep
+    // pushing the view deeper; sideways and vertical references stay put.
+    if (tracked) this.neutral[2] += (this.head[2] - this.neutral[2]) * (1 - Math.exp(-dt / NEUTRAL_DRIFT_S));
     const delta = tracked ? this.head.map((v, i) => v - this.neutral[i]) : [0, 0, 0];
     delta[0] += this.gazeShift[0] * GAZE_REACH_M;
     delta[1] += this.gazeShift[1] * GAZE_REACH_M;
     if (tracked || gazeLive || this.gazeShift.some(v => Math.abs(v) > 1e-3)) {
       eyeOffset(delta, (this.focus / NEUTRAL_DISTANCE_M) * this.strength, this.target);
+      this.target.z = Math.max(this.target.z, -this.focus * (1 - MIN_DISTANCE_FRACTION)); // consistent with the projection clamp
     } else {
       this.target.set(0, 0, 0);
     }

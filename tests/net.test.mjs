@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Net, validScene, validState } from '../web/net.js';
 
+const AVATAR = { pos: [0, 0, -3], vel: [0, 0, 0], yaw: Math.PI, pitch: -.35, flying: false };
 const lm = () => Array.from({ length: 21 }, () => [0, 0, .45]);
 const state = (user = 'B', seq = 1, extra = {}) => ({
-  type: 'state', user, seq, avatar: { pos: [0, 1.6, -3], quat: [0, 1, 0, 0] }, head: { quat: [0, 0, 0, 1] }, target: 'b1',
+  type: 'state', user, seq, avatar: AVATAR, head: { quat: [0, 0, 0, 1] }, target: 'b1',
   hands: [{ side: 'right', pinch: .5, lm: lm() }], held: [{ id: 'b2', pos: [0, .5, 0], quat: [0, 0, 0, 1] }], ...extra,
 });
 const scene = (user = 'A', seq = 1) => ({ type: 'scene', user, seq, objects: [{ id: 'b1', pos: [0, 0, 0], quat: [0, 0, 0, 1] }] });
@@ -31,8 +32,10 @@ test('validates the state contract before anything is drawn from it', () => {
   assert.equal(validState(null), false);
   assert.equal(validState(state('B', 1, { type: 'scene' })), false);
   assert.equal(validState(state('B', NaN)), false);
-  assert.equal(validState(state('B', 1, { avatar: { pos: [0, 1], quat: [0, 0, 0, 1] } })), false);
-  assert.equal(validState(state('B', 1, { avatar: { pos: [0, NaN, 0], quat: [0, 0, 0, 1] } })), false);
+  for (const bad of [{ pos: [0, 1] }, { pos: [0, NaN, 0] }, { vel: undefined }, { yaw: NaN }, { pitch: '0' }, { flying: 0 }]) {
+    assert.equal(validState(state('B', 1, { avatar: { ...AVATAR, ...bad } })), false, JSON.stringify(bad));
+  }
+  assert.equal(validState(state('B', 1, { avatar: null })), false);
   assert.equal(validState(state('B', 1, { head: { quat: [0, 0, 1] } })), false);
   assert.equal(validState(state('B', 1, { target: 7 })), false);
   const short = state(); short.hands[0].lm.pop();

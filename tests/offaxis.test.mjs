@@ -174,3 +174,66 @@ test('malformed gaze is ignored', () => {
   o.setGaze(null, 0);
   assert.equal(o.gazeTarget, null);
 });
+
+test('leaning toward the screen brings objects closer, never farther', () => {
+  const cam = baseCamera();
+  const o = new OffAxis(cam);
+  const forward = new THREE.Vector3(); cam.getWorldDirection(forward);
+  const right = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 0);
+  const point = d => cam.position.clone().addScaledVector(forward, d).addScaledVector(right, 0.5).toArray();
+  o.setHead(head(0, 0, 0.55), 0);
+  let t = settle(o, 50);
+  const offset = d => ndc(o.view, point(d)).x;
+  const before = [2, 4.2, 9].map(offset);
+  for (const z of [0.5, 0.45, 0.4, 0.3]) {
+    t = settle(o, 200, t, head(0, 0, z));
+    const now = [2, 4.2, 9].map(offset);
+    now.forEach((x, i) => assert.ok(x > before[i], `at ${z} m an object ${[2, 4.2, 9][i]} m away got farther`));
+    before.splice(0, 3, ...now);
+  }
+  t = settle(o, 200, t, head(0, 0, 0.8)); // leaning back pushes things away again
+  assert.ok([2, 4.2, 9].map(offset).every((x, i) => x < before[i]));
+});
+
+test('how much the view changes per centimeter of leaning stays steady as you lean closer', () => {
+  const cam = baseCamera();
+  const o = new OffAxis(cam);
+  const forward = new THREE.Vector3(); cam.getWorldDirection(forward);
+  const right = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 0);
+  const p = cam.position.clone().addScaledVector(forward, 6).addScaledVector(right, 1).toArray();
+  o.setHead(head(0, 0, 0.55), 0);
+  let t = settle(o, 50);
+  const steps = [];
+  let last = ndc(o.view, p).x;
+  for (const z of [0.5, 0.45, 0.4, 0.35]) { // 5 cm each
+    t = settle(o, 100, t, head(0, 0, z));
+    const x = ndc(o.view, p).x;
+    steps.push(x - last);
+    last = x;
+  }
+  assert.ok(steps.every(s => s > 0));
+  assert.ok(steps[3] / steps[0] < 2.2, `last step ${steps[3]} vs first ${steps[0]}`);
+});
+
+test('the leaning distance is capped so the eye cannot reach the window plane', () => {
+  const cam = baseCamera();
+  const o = new OffAxis(cam);
+  o.setHead(head(0, 0, 0.9), 0);
+  o.neutral = [0, 0, 0.9];
+  settle(o, 300, 0, head(0, 0, 0.2));
+  assert.ok(o.eye.z >= -o.focus * 0.6 - 1e-9);
+});
+
+test('sitting closer for a long time slowly becomes the new centered depth', () => {
+  const cam = baseCamera();
+  const o = new OffAxis(cam);
+  o.setHead(head(0, 0, 0.55), 0);
+  let t = settle(o, 50);
+  t = settle(o, 100, t, head(0, 0, 0.45));
+  const leaning = o.eye.z;
+  assert.ok(leaning < -0.3);
+  t = settle(o, 60 * 150, t, head(0, 0, 0.45)); // 150 s at 60 fps
+  assert.ok(Math.abs(o.eye.z) < Math.abs(leaning) * 0.2, `eye.z still ${o.eye.z}`);
+  t = settle(o, 100, t, head(0.1, 0, 0.45));
+  assert.ok(o.eye.x > 0.2, 'sideways reference does not drift');
+});

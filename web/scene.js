@@ -24,7 +24,12 @@ export function createRenderer() {
   return renderer;
 }
 
-// The two users stand at opposite ends of the blocks, facing each other.
+// The two users stand at opposite ends of the blocks, facing each other. SPAWNS place the walking avatar (yaw 0 faces
+// -z, so B turns half way around); SEATS place the fixed orbit camera used when DEV_ORBIT is on.
+export const SPAWNS = {
+  A: { pos: [0, 0, 3], yaw: 0, pitch: -0.35 },
+  B: { pos: [0, 0, -3], yaw: Math.PI, pitch: -0.35 },
+};
 const SEATS = { A: [0, 1.6, 3.0], B: [0, 1.6, -3.0] };
 
 export function createScene(userId = 'A') {
