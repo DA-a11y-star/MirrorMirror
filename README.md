@@ -14,7 +14,7 @@ A shared 3D block-modeling workspace driven by eyes, hands, and voice, built for
 | 4. Gaze highlight, pinch to grab | Implemented, awaiting user review: calibrated webcam gaze (replaceable provider) and local grab-and-move. Tests and a headless-browser run pass; accuracy on real eyes is not yet validated |
 | 5. Relay and second user | Not started |
 | 6. Depth effect | Not started |
-| 7. Voice-to-CAD | Not started |
+| 7. Voice-to-CAD | Implemented locally on `feature/voice-to-object`: Muse transcription → Muse Wonder primitive assemblies; live API and synthetic-microphone browser checks pass; real-user rehearsal pending |
 | 8. Polish | Queued: **8a fast-motion tracking recovery**, **8b side-profile stability**, then **8c sound/feedback/visuals** |
 
 The browser tracker reuses the sensing algorithms from the standalone OpenCV prototype (`hand_mouse.py`). Shared camera geometry, gesture classification and One Euro filtering now live in `tracker/`; the prototype imports these same helpers.
@@ -49,7 +49,16 @@ web/
   gaze-ui.js           Calibration overlay, gaze reticle, status line
   interaction.js       Gaze targeting, highlight, pinch grab/move/release
   mock.js              Camera-free tracker for development using the same protocol
+  objects.js           Primitive assembly rendering, free-space placement, undo and disposal
+  voice.js             Browser recording, local WAV conversion and voice WebSocket client
+  voice-ui.js          Push-to-talk, editable descriptions and generation progress
   vendor/              three.js 0.186.1 and OrbitControls, vendored (never load from a CDN)
+voice/
+  main.py              Independent local voice WebSocket service (localhost:8767)
+  muse.py              Meta API adapters: Voice Transcribe and Muse Wonder
+  planner.py           Structured assembly prompt and one layout repair attempt
+  schema.py            Model-output schema and validation
+  layout.py            Face alignment, repeated corner supports, scaling and grounding
 tests/                 Python and Node tests (see "Milestone 2 checks" and "Milestone 4 checks")
 ```
 
@@ -141,10 +150,54 @@ The target is a steady 60 fps. If a large or high-DPI window drops below that, l
 | `USER_ID` | `'A'` or `'B'`. Laptop A is the scene authority |
 | `RELAY_URL` | Laptop A's LAN address. Placeholder until the relay exists |
 | `TRACKER_URL` | Local tracker WebSocket, `ws://localhost:8766` |
+| `VOICE_URL` | Local voice WebSocket, `ws://localhost:8767` |
 | `TRACKER_SOURCE` | `'websocket'` for the local Python tracker (default), or `'mock'` |
 | `GAZE_SOURCE` | `'webcam'` (calibrated iris features, default), `'external'` (tracker-provided screen coordinates), or `'pointer'` (mouse, development). Ignored in mock mode, which always uses the pointer |
 | `SCREEN_WIDTH_M`, `SCREEN_HEIGHT_M` | Physical screen size in meters, for the depth effect. Defaults assume a 14" MacBook Pro |
 | `DEV_ORBIT` | Mouse-orbit camera for development. Turn off once head pose or the avatar drives the camera |
+
+### Voice-to-object generation (milestone 7)
+
+Install the updated dependencies, then run the voice service in a **third terminal**, alongside the tracker and static web server:
+
+```bash
+.venv/bin/python -m pip install -r requirements.txt
+export MODEL_API_KEY="<your Meta Model API key>"
+.venv/bin/python -m voice.main
+```
+
+The key is read only by Python and is never sent to the browser. Keep it out of `web/config.js` and Git. `.env` files are ignored, but **not loaded automatically**; export the variable in the service terminal. Restart the service after changing it.
+
+Open `http://localhost:8000` (or `http://127.0.0.1:8000`). The voice service accepts these browser origins and binds only to localhost. It reconnects automatically if you start it after opening the page. Tracker inference remains independent of all model requests.
+
+1. In **Build with your voice**, hold **Hold to speak**, say an object description, and release to submit. You can also focus the button and hold Space or Enter. Grant microphone permission; if you released during the permission prompt, hold again to record.
+2. Watch **Preparing audio → Transcribing → Designing**. The recognized transcript appears in the text field.
+3. A low-poly object appears in an unoccupied part of the workspace. Look at any part and pinch to move the whole assembly.
+4. Use **Undo creation**, or say/type “undo,” to remove the last generated object.
+5. Edit the text and press **Build** to make another object without recording again.
+
+Good demo prompts:
+- “Create a blue chair with wooden legs.”
+- “Make a red table with four legs.”
+- “Create a tree with a brown trunk and green leaves.”
+- “Build a small rocket with a red nose cone and three fins.”
+
+**Pipeline and geometry.** The browser records up to 15 seconds with MediaRecorder, decodes locally and resamples to mono 24 kHz, 16-bit PCM WAV using Web Audio (no ffmpeg or extra microphone process). Python uploads it to `POST https://api.meta.ai/v1/asr/transcribe` using `muse-voice-transcribe-1.0`, then calls `/v1/chat/completions` with `muse-wonder-1.0` and a constrained JSON schema. Internet access and access to both models are required. Override model IDs with `ASR_MODEL` and `OBJECT_MODEL` if needed.
+
+Wonder chooses boxes, ellipsoids, cylinders and cones, colors, dimensions, rotations and placement relationships. Python validates finite values, dimensions, IDs and references; resolves touching bounding faces and symmetric `corners_below` supports; rejects cycles and more than 40 expanded parts; and centers/grounds the object. The default largest dimension is 0.8 m; explicit requested dimensions are supported from 0.1 to 3 m. One model repair attempt handles invalid layouts. Three.js renders each assembly as a group of meshes with shared unit geometries, independent standard materials and shadows. New objects register with gaze targeting immediately; undo unregisters them and releases materials.
+
+**Current scope.** Creation and undo work locally. Follow-up editing commands (such as “make it taller”), arbitrary triangle mesh generation, physics, scene persistence and two-laptop synchronization are future work. Specs have stable assembly/part IDs and explicit transforms for later relay integration. An editable transcript corrects recognition errors; typed descriptions exercise the same planner. Live transcription accuracy, model latency and object quality need a rehearsal with your API account and microphone.
+
+Checks (no API key or camera required):
+
+```bash
+.venv/bin/python -m unittest discover -s tests -p 'test_voice.py' -v
+node --test tests/objects.test.mjs tests/voice.test.mjs tests/interaction.test.mjs
+```
+
+These exercise symmetric connected layouts, rotated bounds, invalid relationships, audio format/limits, Meta request contracts against a local HTTP server, the real local WebSocket pipeline with a fake model, dynamically added compound-object targeting/highlighting/grabbing, floor constraints, collision-free spawn placement, disposal and WAV sample encoding. They do not call the live Meta API.
+
+A separate live smoke check transcribed synthesized “Create a blue chair with wooden legs” through Muse Voice Transcribe and successfully generated a validated 13-part chair with Muse Wonder. A headless Chrome smoke check also exercised real MediaRecorder/Web Audio with a synthetic microphone, WAV upload, typed and spoken creation against a local fake model, WebGL rendering, transcript display and undo without browser exceptions. Real-user microphone quality and gaze/grab feel still need a manual demo rehearsal.
 
 ### Tracker data and coordinates
 

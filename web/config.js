@@ -3,6 +3,7 @@
 export const USER_ID = 'A'; // laptop A is the scene authority
 export const RELAY_URL = 'ws://192.168.1.10:8765'; // laptop A's LAN address
 export const TRACKER_URL = 'ws://localhost:8766';
+export const VOICE_URL = 'ws://localhost:8767';
 // 'websocket' = local Python tracker; 'mock' = animated hands for camera-free development.
 export const TRACKER_SOURCE = 'websocket';
 // 'webcam' = calibrated iris features; 'external' = tracker-provided screen gaze; 'pointer' = explicit dev fallback.

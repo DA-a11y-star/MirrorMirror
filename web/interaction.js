@@ -32,11 +32,28 @@ export class Interaction {
     this.pinch = new THREE.Vector3();
     this.world = new THREE.Vector3();
     this.bounds = new THREE.Box3();
-    this.size = new THREE.Vector3();
     this.corner = new THREE.Vector3();
-    this.baseMaterials = new Map(blocks.children.map(mesh => [mesh, {
-      emissive: mesh.material.emissive.clone(), intensity: mesh.material.emissiveIntensity,
-    }]));
+    this.baseMaterials = new Map();
+    for (const root of blocks.children) this.register(root);
+  }
+
+  register(root) {
+    root.traverse(mesh => {
+      if (mesh.isMesh) this.baseMaterials.set(mesh, {
+        emissive: mesh.material.emissive.clone(), intensity: mesh.material.emissiveIntensity,
+      });
+    });
+  }
+
+  unregister(root) {
+    if (this.target === root || this.challenger === root) this.resetTargeting();
+    for (const [side, grab] of this.grabs) if (grab.mesh === root) this.grabs.delete(side);
+    root.traverse(mesh => this.baseMaterials.delete(mesh));
+  }
+
+  rootOf(object) {
+    while (object && object.parent !== this.blocks) object = object.parent;
+    return object ?? null;
   }
 
   setFrame(frame) {
@@ -85,7 +102,7 @@ export class Interaction {
     this.pointer.set(gaze.x * 2 - 1, 1 - gaze.y * 2);
     // The ray starts at the viewer's eye and passes through the gazed point on the screen.
     this.raycaster.setFromCamera(this.pointer, this.gazeCamera);
-    const hit = this.raycaster.intersectObjects(this.blocks.children, false)[0]?.object ?? null;
+    const hit = this.rootOf(this.raycaster.intersectObjects(this.blocks.children, true)[0]?.object);
     const found = [];
     for (const mesh of this.blocks.children) {
       const rect = this.screenRect(mesh);
@@ -165,8 +182,9 @@ export class Interaction {
       }
       this.world.copy(this.pinch).sub(grab.pinch).multiplyScalar(grab.gain).add(grab.start);
       // Simple floor constraint, not an object-to-object physics solver.
-      this.bounds.setFromObject(grab.mesh).getSize(this.size);
-      this.world.y = Math.max(this.size.y / 2, this.world.y);
+      this.bounds.setFromObject(grab.mesh);
+      const currentY = grab.mesh.getWorldPosition(this.corner).y;
+      this.world.y = Math.max(currentY - this.bounds.min.y, this.world.y);
       grab.mesh.position.copy(grab.mesh.parent.worldToLocal(this.world));
     }
     this.wasPinched = pinched;
@@ -188,12 +206,18 @@ export class Interaction {
       mesh.material.emissiveIntensity = base.intensity;
     }
     if (this.target) {
-      this.target.material.emissive.setHex(0xf4c95d);
-      this.target.material.emissiveIntensity = .35;
+      this.tint(this.target, 0xf4c95d, .35);
     }
     for (const { mesh } of this.grabs.values()) {
-      mesh.material.emissive.setHex(0x5bbfbd);
-      mesh.material.emissiveIntensity = .5;
+      this.tint(mesh, 0x5bbfbd, .5);
     }
+  }
+
+  tint(root, color, intensity) {
+    root.traverse(mesh => {
+      if (!mesh.isMesh) return;
+      mesh.material.emissive.setHex(color);
+      mesh.material.emissiveIntensity = intensity;
+    });
   }
 }

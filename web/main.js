@@ -1,5 +1,5 @@
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { DEV_ORBIT, GAZE_SOURCE, PARALLAX_STRENGTH, TRACKER_SOURCE, TRACKER_URL, USER_ID } from './config.js';
+import { DEV_ORBIT, GAZE_SOURCE, PARALLAX_STRENGTH, TRACKER_SOURCE, TRACKER_URL, USER_ID, VOICE_URL } from './config.js';
 import { OffAxis } from './offaxis.js';
 import { Hands } from './hands.js';
 import { startMockTracker } from './mock.js';
@@ -8,6 +8,8 @@ import { startTracker } from './tracker.js';
 import { GazeInput } from './gaze.js';
 import { GazeUI } from './gaze-ui.js';
 import { Interaction } from './interaction.js';
+import { Objects } from './objects.js';
+import { VoiceUI } from './voice-ui.js';
 
 const renderer = createRenderer();
 const { scene, camera, blocks } = createScene();
@@ -19,8 +21,13 @@ const view = offAxis.view;
 const gaze = new GazeInput(TRACKER_SOURCE === 'mock' ? 'pointer' : GAZE_SOURCE);
 const interaction = new Interaction(blocks, camera, hands, view, { onLearn: sample => gaze.learn(sample) });
 const gazeUI = new GazeUI(gaze, () => interaction.releaseAll());
-window.app = { renderer, scene, camera, view, hands, blocks, interaction, gaze, gazeUI, offAxis }; // dev console
-window.addEventListener('keydown', e => { if (e.key === 'h' || e.key === 'H') offAxis.recenter(); });
+const objects = new Objects(blocks, interaction);
+const voiceUI = new VoiceUI(VOICE_URL, objects);
+window.app = { renderer, scene, camera, view, hands, blocks, interaction, gaze, gazeUI, offAxis, objects, voiceUI }; // dev console
+window.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, button')) return;
+  if (e.key === 'h' || e.key === 'H') offAxis.recenter();
+});
 
 const controls = DEV_ORBIT ? new OrbitControls(camera, renderer.domElement) : null;
 if (controls) {
