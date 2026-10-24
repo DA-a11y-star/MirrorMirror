@@ -100,7 +100,7 @@ class HandFrames:
                 continue
             sides.add(side)
             if key not in self.states:
-                self.states[key] = dict(filter=OneEuroFilter(min_cutoff=3.0, beta=4.0),
+                self.states[key] = dict(filter=OneEuroFilter(min_cutoff=3.0, beta=4.0, d_cutoff=6.0),
                                         gesture=GestureState(), packet=None)
             state = self.states[key]
             packet = state["packet"]

@@ -12,7 +12,7 @@ A shared 3D block-modeling workspace driven by eyes, hands, and voice, built for
 | 2. Tracker streams hands to the browser | Accepted by user: movement and responsiveness are okay; live WebSocket, pinch events and recovery work |
 | 3. Finger-puppet walking | Not started |
 | 4. Gaze highlight, pinch to grab | Implemented, awaiting user review: calibrated webcam gaze (replaceable provider) and local grab-and-move. Tests and a headless-browser run pass; accuracy on real eyes is not yet validated |
-| 5. Relay and second user | Not started |
+| 5. Relay and second user | Implemented, awaiting user review: relay, face-to-face avatars with the other user's head and hands, block ownership and scene sync. Unit tests and a two-browser headless run through the real relay pass; not yet tried on two laptops or with a real head |
 | 6. Depth effect | Not started |
 | 7. Voice-to-CAD | Not started |
 | 8. Polish | Queued: **8a fast-motion tracking recovery**, **8b side-profile stability**, then **8c sound/feedback/visuals** |
@@ -31,6 +31,8 @@ hand_landmarker.task   MediaPipe hand model (downloaded automatically if missing
 face_landmarker.task   MediaPipe face/iris model for webcam gaze (downloaded once on first run; gitignored)
 requirements.txt       Python dependencies
 CLAUDE.md              Project plan, protocol, conventions
+relay/
+  relay.py             Dumb broadcast between the laptops: forwards each message to every other client, no state
 tracker/
   main.py              Local WebSocket service + MediaPipe inference worker
   capture.py           Dedicated camera thread; latest-frame slot (no capture backlog)
@@ -41,19 +43,22 @@ tracker/
 web/
   index.html           Page shell; maps "three" to the vendored copy; gaze controls
   config.js            Per-laptop settings (user ID, URLs, screen size, tracker and gaze source)
-  main.js              Render loop, tracker message handling, HUD
+  main.js              Render loop, tracker and relay message handling, HUD
   tracker.js           Local WebSocket client, validation, reconnect and stale-feed timeout
   scene.js             Renderer, lights, floor, starter blocks
   hands.js             Hand skeleton rendering and the single tracker -> world mapping
   gaze.js              9-point calibration (ridge regression) and the source-independent gaze input
   gaze-ui.js           Calibration overlay, gaze reticle, status line
   interaction.js       Gaze targeting, highlight, pinch grab/move/release
+  net.js               Relay client: message envelope, validation, reconnect, sequence numbers
+  sync.js              Block ownership and scene sync between the two laptops
+  avatar.js            The other user: bust, head, hands, and what they are looking at
   mock.js              Camera-free tracker for development using the same protocol
   vendor/              three.js 0.186.1 and OrbitControls, vendored (never load from a CDN)
 tests/                 Python and Node tests (see "Milestone 2 checks" and "Milestone 4 checks")
 ```
 
-Planned but not yet created: `relay/` and `web/` modules `avatar.js`, `locomotion.js`, `net.js`, `offaxis.js`.
+Planned but not yet created: `web/locomotion.js`.
 
 ## Setup
 
@@ -134,14 +139,41 @@ For camera-free development, set `TRACKER_SOURCE = 'mock'` in `web/config.js`. T
 
 The target is a steady 60 fps. If a large or high-DPI window drops below that, lower the pixel-ratio cap in `createRenderer()` in `scene.js` from 2 to 1.5.
 
+### Two users (milestone 5)
+
+The two users stand at opposite ends of the blocks, facing each other. Laptop A is the scene authority.
+
+```bash
+# Laptop A only
+.venv/bin/python relay/relay.py
+
+# Laptop A: tracker and web server as above, then open http://localhost:8000
+# Laptop B: tracker only, then open laptop A's web server:
+#   http://<laptop A's address>:8000/?user=B
+```
+
+No address is written into the app, because it changes with every network. A page looks for the relay on the machine that served the page: laptop A finds it at `localhost`, and laptop B finds it by opening A's web server, which also means B runs A's copy of the page. B still runs its own tracker on its own camera. Find A's address with `ipconfig getifaddr en0` (or Wi-Fi settings). If B serves its own copy of the page instead, add `&relay=ws://<A's address>:8765` to the URL. The HUD shows `relay connected with B` on A and `relay connected with A` on B once both are up. While a page can't reach the relay, the HUD shows the address it is trying, so a wrong one is easy to spot.
+
+What each user sees of the other: a blue bust at their eye position, a head that turns with theirs, their hands next to them, a violet glow on the block they are looking at, and a brighter glow on the block they are holding. Their avatar disappears 0.7 s after they stop sending.
+
+Ownership:
+- Whoever grabs a block owns it and streams its position; the other laptop only draws it. A block the other user holds can't be targeted or grabbed until they let go.
+- If both grab the same block in the same instant, the lower user id keeps it (A over B) and the other laptop lets go.
+- Laptop A rebroadcasts every block about 10 times a second, so a laptop that reloads or joins late catches up within a moment. If laptop A reloads, the blocks reset to the starter layout.
+
+To try it on one laptop, run one relay and one tracker, then open two browser **windows** (not tabs: a background tab stops rendering and sending). For example `localhost:8000/?user=A&relay=ws://localhost:8765` and `localhost:8000/?user=B&relay=ws://localhost:8765`. Add `&tracker=mock` to either for camera-free animated hands. Both windows can share the one tracker, so both users' hands move together.
+
+If the laptops can't reach each other, some venue Wi-Fi isolates clients from each other. Test this early; a phone hotspot or an ethernet cable between the laptops avoids it.
+
 ### Settings (`web/config.js`)
 
 | Setting | Meaning |
 |---|---|
-| `USER_ID` | `'A'` or `'B'`. Laptop A is the scene authority |
-| `RELAY_URL` | Laptop A's LAN address. Placeholder until the relay exists |
+| `USER_ID` | `'A'` or `'B'`, which end of the blocks you stand at. Override with `?user=B` in the page URL |
+| `HOST_ID` | The scene authority, `'A'` |
+| `RELAY_URL` | Where the relay is. Defaults to port 8765 on the machine that served the page. Override with `?relay=ws://<address>:8765` in the page URL |
 | `TRACKER_URL` | Local tracker WebSocket, `ws://localhost:8766` |
-| `TRACKER_SOURCE` | `'websocket'` for the local Python tracker (default), or `'mock'` |
+| `TRACKER_SOURCE` | `'websocket'` for the local Python tracker (default), or `'mock'`. Override with `?tracker=mock` in the page URL |
 | `GAZE_SOURCE` | `'webcam'` (calibrated iris features, default), `'external'` (tracker-provided screen coordinates), or `'pointer'` (mouse, development). Ignored in mock mode, which always uses the pointer |
 | `SCREEN_WIDTH_M`, `SCREEN_HEIGHT_M` | Physical screen size in meters, for the depth effect. Defaults assume a 14" MacBook Pro |
 | `DEV_ORBIT` | Mouse-orbit camera for development. Turn off once head pose or the avatar drives the camera |
@@ -229,10 +261,26 @@ Shared sensing constants are in `tracker/hands.py`, `tracker/gestures.py` and `t
 ## Known issues
 
 - **Webcam gaze is coarse and untested on real eyes (milestone 4).** The pipeline is verified with synthetic eye data and a sample photo, but nobody has calibrated it against a real person yet. Iris-only webcam gaze is typically accurate to a few degrees at best (a block-sized target at laptop distance), drifts if your head moves after calibration, and degrades in dim light or with glasses glare. Keep blocks reasonably large and apart, and recalibrate if the highlight feels off. A dedicated eye tracker is the intended upgrade through the `external` source.
+- **The other user's head direction is untested on a real head (milestone 5).** The conversion from the tracker's head rotation is derived from its conventions and unit-tested, but nobody has turned their head and watched the other laptop. If the avatar turns the wrong way, the fix is one line in `headQuaternion` in `web/avatar.js`.
+- **The other user sits at the top edge of the screen.** Each camera looks down at the blocks from eye height 1.6 m, so the person at the far end lands at the top of the view, small and partly under the controls panel. Lowering the seat height in `SEATS` in `web/scene.js` brings them toward the middle.
+- **The other user's hands appear beside their body, not at the blocks.** Hands are drawn in front of each user's own view, as locally, and a grab moves the block by up to 6 times the hand's motion. There is no line from their hand to the block they hold.
 - **Fast hand movement can lose tracking (milestone 8a).** User-confirmed. Prioritize recovery/latency and motion-blur evaluation before visual polish; keep grab state stable across brief gaps.
 - **Side-profile / edge-on hands are unstable (milestone 8b).** User-confirmed. Evaluate occlusion, pose-fitting stability and reacquisition when the palm becomes visible again.
 - **Fast twists can drop a grab.** Hands are keyed by MediaPipe's left/right label, which can flip when a hand twists quickly. The hand then counts as new: it still shows a pinch but no longer holds the shape. Matching hands by position fixed this but was reverted.
 - **Depth is an estimate.** It assumes an average hand size and the configured field of view. Expect a little drift on held shapes.
+
+## Milestone 5 checks
+
+```bash
+.venv/bin/python -m unittest discover -s tests -v
+node --test tests/*.test.mjs
+```
+
+These cover the relay (forwards to every other client, not the sender; text passes through untouched; a leaving client doesn't affect the rest; no state kept for late joiners), the message contract and validation, sequence-number dedupe, reconnects and dropped snapshots (`net.js`), block ownership (a held block follows its holder's stream, the lower user id wins a same-instant grab, host snapshots never override a held block or pull one back right after release, quiet peers lose their holds), the avatar (placement, head rotation, easing, disappearing and reappearing in place), and the interaction rules for blocks the other user holds. Each rule was checked by deliberately breaking it and confirming a test fails.
+
+A two-browser run in headless Chrome through the real relay, with mock trackers and the pointer as gaze, also passed: both users see each other at opposite ends with two remote hands, B's gaze target shows on A, A follows B's block while B holds it and cannot target it, both agree on the final pose after release with no jump-back, the same in the other direction, a reloaded B catches up to the host's scene, a closed B disappears from A, and neither page threw an exception. That script is a one-off with machine-specific paths and isn't in the repo.
+
+**Manual check still needed:** two laptops on the real network, with real hands and a real head turn.
 
 ## Milestone 4 checks
 

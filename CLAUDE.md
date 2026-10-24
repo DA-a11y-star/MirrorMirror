@@ -20,7 +20,7 @@ Existing code: shared hand sensing lives in `tracker/hands.py`, `tracker/gesture
 tracker/   main.py, hands.py, gaze.py, gestures.py, filters.py (One Euro)
 relay/     relay.py
 web/       index.html, main.js, config.js, scene.js, avatar.js, hands.js,
-           interaction.js, locomotion.js, net.js, offaxis.js, vendor/three.module.js
+           interaction.js, locomotion.js, net.js, sync.js, offaxis.js, vendor/three.module.js
 ```
 
 ## Running
@@ -29,7 +29,7 @@ python relay/relay.py                  # laptop A only
 python tracker/main.py                 # each laptop
 cd web && python -m http.server 8000   # each laptop, open localhost:8000
 ```
-`web/config.js` holds `RELAY_URL`, `USER_ID`, `TRACKER_URL`, and the screen's physical width and height in meters (for the depth effect).
+`web/config.js` holds `RELAY_URL`, `USER_ID`, `TRACKER_URL`, and the screen's physical width and height in meters (for the depth effect). `user`, `relay` and `tracker` can be overridden in the page URL (`?user=B&relay=ws://localhost:8765&tracker=mock`), so one laptop can run both users in two browser windows (not tabs: a background tab stops rendering and sending).
 
 ## Protocol
 All messages are JSON, which is fine at this size on a LAN. Optimize only if measured latency demands it.
@@ -46,17 +46,24 @@ All messages are JSON, which is fine at this size on a LAN. Optimize only if mea
 **web → relay → other web**
 ```json
 {"type":"state","user":"A","seq":123,
- "avatar":{"pos":[x,y,z],"yaw":0},"head":{...},"gaze_ray":{...},
- "hands":[...],"held":[{"id":"b7","pos":[...],"quat":[...]}]}      // ~30 Hz
+ "avatar":{"pos":[x,y,z],"quat":[x,y,z,w]},"head":{"quat":[x,y,z,w]}|null,"target":"b3"|null,
+ "hands":[{"side","pinch","lm":[[x,y,z],...21]}],
+ "held":[{"id":"b7","pos":[...],"quat":[...]}]}                    // ~30 Hz
 {"type":"op","user":"A","op":"add|delete|color","obj":{...}}       // discrete edits
-{"type":"scene","objects":[{"id","kind","pos","quat","scale","color"}]}  // host, ~10 Hz
+{"type":"scene","user":"A","seq":124,"objects":[{"id","kind","pos","quat","scale","color"}]}  // host, ~10 Hz
 ```
+
+`avatar` is the sender's base camera pose, so each laptop's seat is wherever its user's view is. The two users start at opposite ends of the blocks, facing each other (`SEATS` in `scene.js`). `head.quat` is the tracker's head rotation, converted in `headQuaternion` in `avatar.js`. `target` is the block the sender is looking at (the other laptop shows it as a violet glow). `hands` are the landmarks from the sender's tracker frame, drawn through the sender's seat. Messages without `op` handling are ignored until voice-to-CAD needs them.
 
 Rules:
 - Each `state` message is a full snapshot. Drop anything with an older `seq`.
 - **Ownership:** whoever grabs an object owns it and streams its transform. Everyone else only renders it. Releasing returns ownership to the host.
 - Laptop A is the scene authority. It applies `op` messages and periodically broadcasts `scene`.
-- Smooth remote poses on receipt (`pos += (target - pos) * 0.3` per frame).
+- Smooth remote poses on receipt (`pos += (target - pos) * 0.3` per frame; implemented as the same easing in terms of `dt`).
+- The relay keeps no state. A laptop that joins or reloads catches up from the host's 10 Hz `scene` messages.
+- A block someone else holds can't be targeted or grabbed. If both grab the same block at the same instant, the lower user id keeps it and the other laptop lets go.
+- After releasing a block, ignore `scene` messages for it for 400 ms, so a snapshot sent before the release arrived can't pull it back. A laptop that stops sending for 700 ms loses its holds and its avatar.
+- `seq` starts at `Date.now()` so a reloaded page isn't mistaken for old traffic.
 
 
 ## Rendering
@@ -74,7 +81,7 @@ Rules:
 2. Tracker streams hands to the browser, which draws them — accepted by user: movement and responsiveness are okay
 3. One avatar walks via the finger-puppet gesture
 4. Gaze highlights a block, and pinch grabs and moves it — implemented, awaiting user review: calibrated webcam gaze (9-point, `web/gaze.js`), replaceable gaze provider (`PROVIDERS` in `tracker/gaze.py`, or `external` source in the browser), local manipulation (`web/interaction.js`), forgiving gaze targeting (snap radius, hysteresis, blink grace) and calibration that refines itself from confirmed grabs. Automated tests and a headless-browser E2E pass; real-eye accuracy is not yet validated.
-5. Relay shows the second user's avatar, hands, and edits
+5. Relay shows the second user's avatar, hands, and edits — implemented, awaiting user review: `relay/relay.py`, `web/net.js` (envelope, validation, reconnect, seq dedupe), `web/sync.js` (ownership, host scene, easing), `web/avatar.js` (bust, head, remote hands, gaze glow). Unit tests and a two-browser headless run through the real relay pass; not yet tried on two laptops or with a real head. `add|delete|color` ops wait for voice-to-CAD (milestone 7).
 6. Depth effect
 7. Voice-to-CAD
 8. Polish (in this priority order):
