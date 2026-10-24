@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { DEV_ORBIT, GAZE_SOURCE, HOST_ID, PARALLAX_STRENGTH, RELAY_URL, TRACKER_SOURCE, TRACKER_URL, USER_ID } from './config.js';
+import { DEV_ORBIT, GAZE_SOURCE, HOST_ID, PARALLAX_STRENGTH, RELAY_URL, TRACKER_SOURCE, TRACKER_URL, USER_ID, VOICE_URL } from './config.js';
 import { RemoteAvatar } from './remote-avatar.js';
 import { OffAxis } from './offaxis.js';
 import { Hands } from './hands.js';
@@ -17,6 +17,8 @@ import { Locomotion } from './locomotion.js';
 import { Avatar, EYE_HEIGHT } from './avatar.js';
 import { CameraRig } from './camera.js';
 import { Dev } from './dev.js';
+import { Objects } from './objects.js';
+import { VoiceUI } from './voice-ui.js';
 
 const STATE_HZ = 30; // how often this laptop sends its state to the other
 
@@ -33,7 +35,9 @@ const gazeUI = new GazeUI(gaze, () => interaction.releaseAll());
 const sync = new SceneSync(blocks, { userId: USER_ID, hostId: HOST_ID });
 const peers = new Map(); // user id -> RemoteAvatar
 const heldIds = () => new Set([...interaction.grabs.values()].map(grab => grab.mesh.userData.id));
-window.app = { renderer, scene, camera, view, hands, blocks, interaction, gaze, gazeUI, offAxis, sync, peers }; // dev console
+const objects = new Objects(blocks, interaction);
+const voiceUI = new VoiceUI(VOICE_URL, objects);
+window.app = { renderer, scene, camera, view, hands, blocks, interaction, gaze, gazeUI, offAxis, sync, peers, objects, voiceUI }; // dev console
 
 // Avatar, camera rig and input. Keys and mouse are read only in input.js; everything below consumes intents.
 const input = new Input(renderer.domElement);

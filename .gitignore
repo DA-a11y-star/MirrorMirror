@@ -13,3 +13,8 @@ face_landmarker.download
 .idea/
 .vscode/
 *.swp
+
+# Server-side credentials
+.env
+.env.*
+!.env.example

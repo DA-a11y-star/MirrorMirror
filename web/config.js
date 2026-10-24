@@ -9,6 +9,7 @@ export const HOST_ID = 'A'; // laptop A is the scene authority
 // ?relay=ws://<A's address>:8765. No address is hard-coded: it changes with every network.
 export const RELAY_URL = params.get('relay') ?? `ws://${globalThis.location?.hostname || 'localhost'}:8765`;
 export const TRACKER_URL = 'ws://localhost:8766';
+export const VOICE_URL = 'ws://localhost:8767';
 // 'websocket' = local Python tracker; 'mock' = animated hands for camera-free development.
 export const TRACKER_SOURCE = params.get('tracker') ?? 'websocket';
 // 'webcam' = calibrated iris features; 'external' = tracker-provided screen gaze; 'pointer' = explicit dev fallback.

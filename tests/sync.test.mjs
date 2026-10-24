@@ -130,6 +130,19 @@ test('a laptop that goes quiet loses its holds', () => {
   assert.equal(s.sync.holders.size, 0);
 });
 
+test('holding a local voice assembly leaves relay snapshots valid and shared block ownership intact', () => {
+  const s = setup('A');
+  const local = new THREE.Group();
+  local.userData.id = 'generated-local-chair';
+  s.blocks[0].parent.add(local);
+  const mine = new Set(['b1', local.userData.id]);
+  assert.deepEqual(s.sync.snapshotHeld(mine).map(pose => pose.id), ['b1']);
+  s.run(100, mine);
+  assert.equal(s.sync.sceneSnapshot(s.clock.now).objects.length, 3);
+  assert.deepEqual(s.sync.applyState(held('B', 'b1'), s.clock.now, mine), []);
+  assert.equal(s.sync.holders.has('b1'), false, 'the lower-user-id ownership rule is preserved');
+});
+
 test('snapshots carry every block, and the scene goes out about every 100 ms from the host only', () => {
   const a = setup('A');
   a.blocks[1].position.set(1.23456789, .2, 0);

@@ -34,9 +34,9 @@ export function emptyIntents() {
   };
 }
 
-// Keystrokes aimed at a form control (the gaze source dropdown) belong to that control.
+// Voice controls own their keys too: Space/Enter record rather than moving the avatar or blurring the mic button.
 function isTyping(target) {
-  return target instanceof HTMLElement && (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA');
+  return target instanceof HTMLElement && (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA' || !!target.closest?.('#voice-tools'));
 }
 
 export class Input {
@@ -55,7 +55,7 @@ export class Input {
     target.addEventListener('keyup', e => this._keyUp(e));
     target.addEventListener('blur', () => this.clear());
     target.addEventListener('wheel', e => {
-      if (e.target instanceof Element && e.target.closest('#tools, #calibration')) return;
+      if (e.target instanceof Element && e.target.closest('#tools, #calibration, #voice-tools')) return;
       e.preventDefault();
       const unit = e.deltaMode === 1 ? 1 : 100; // lines vs pixels
       this.wheel += e.deltaY / unit;

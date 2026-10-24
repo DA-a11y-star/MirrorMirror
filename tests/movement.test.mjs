@@ -360,6 +360,30 @@ test('input: mouse look only while pointer-locked; scroll becomes zoom', async (
   assert.equal(input.poll().zoom, 2);
 });
 
+test('input: voice buttons retain focus and own recording keys and scrolling', async () => {
+  const { input, target } = await makeInput();
+  const microphone = new globalThis.HTMLButtonElement();
+  microphone.closest = selector => selector.includes('#voice-tools') ? microphone : null;
+  let blurred = false;
+  microphone.blur = () => { blurred = true; };
+  for (const code of ['Space', 'Enter', 'KeyF', 'KeyH', 'ArrowUp']) {
+    target.dispatchEvent(Object.assign(fakeEvent('keydown', microphone), {
+      code, repeat: false, preventDefault() { throw new Error('Game input must not consume voice keys'); },
+    }));
+    target.dispatchEvent(Object.assign(fakeEvent('keyup', microphone), {
+      code, preventDefault() { throw new Error('Game input must not consume voice keyup'); },
+    }));
+  }
+  target.dispatchEvent(Object.assign(fakeEvent('wheel', microphone), {
+    deltaY: 200, deltaMode: 0, preventDefault() { throw new Error('Voice panel scrolling belongs to the panel'); },
+  }));
+  const intent = input.poll();
+  assert.equal(blurred, false);
+  assert.deepEqual(intent.move, { forward: 0, strafe: 0, vertical: 0 });
+  assert.equal(intent.zoom, 0);
+  assert.ok(Object.values(intent.toggles).every(value => !value));
+});
+
 test('your own avatar is hidden in first person (the default) and shown in third person and free cam', () => {
   const l = new Locomotion();
   const { rig, step } = rigAt(l, undefined, undefined);

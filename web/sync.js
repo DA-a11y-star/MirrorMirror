@@ -91,7 +91,9 @@ export class SceneSync {
 
   // Transforms of the blocks this laptop holds, for the `held` field of its state message.
   snapshotHeld(mine) {
-    return [...mine].map(id => {
+    // Voice assemblies are local in this milestone. They share the interaction container but are not relay
+    // blocks; don't look up an absent mesh or advertise ownership of an object the other laptop cannot render.
+    return [...mine].filter(id => this.meshes.has(id)).map(id => {
       const mesh = this.meshes.get(id);
       return { id, pos: mesh.position.toArray().map(round), quat: mesh.quaternion.toArray().map(round) };
     });

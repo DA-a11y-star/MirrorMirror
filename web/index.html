@@ -37,6 +37,18 @@
     #cancel-calibration { position: absolute; bottom: 18px; right: 18px; }
     #calibration-dot { position: absolute; width: 28px; height: 28px; transform: translate(-50%, -50%); border-radius: 50%; background: #335eea; border: 6px solid white; box-shadow: 0 0 0 3px #98adf0; }
     #calibration-dot::after { content: ''; position: absolute; inset: 10px; border-radius: 50%; background: white; }
+    #voice-tools {
+      position: fixed; bottom: 18px; left: 18px; width: min(480px, calc(100vw - 64px));
+      padding: 14px; border: 1px solid #cdd4df; border-radius: 12px;
+      background: rgba(255,255,255,.94); color: #24334a; font: 13px/1.5 system-ui, sans-serif;
+      box-shadow: 0 5px 24px #24334a15;
+    }
+    #voice-form { display: flex; gap: 8px; margin: 8px 0; }
+    #object-description { min-width: 0; flex: 1; font: inherit; padding: 7px; border: 1px solid #aab8ca; border-radius: 7px; }
+    #voice-record { touch-action: none; user-select: none; }
+    #voice-record[aria-pressed="true"] { background: #ffe0dc; border-color: #e76f51; }
+    button:disabled { opacity: .5; cursor: default; }
+    #voice-status { margin-top: 8px; }
     [hidden] { display: none !important; }
   </style>
   <script type="importmap">
@@ -58,6 +70,17 @@
     <div class="hint">Move: ↑↓ walk · ←→ turn · A/D strafe · F fly (Space/Shift up/down) · V view · C free cam · P depth · R respawn · ` dev. Click the scene to mouse-look (Esc releases).</div>
   </div>
   <div id="gaze-reticle" hidden></div>
+  <section id="voice-tools" aria-label="Voice object creation">
+    <strong>Build with your voice</strong>
+    <form id="voice-form">
+      <input id="object-description" aria-label="Object description" maxlength="2000" placeholder="A blue chair with wooden legs" autocomplete="off">
+      <button id="voice-build" type="submit" disabled>Build</button>
+    </form>
+    <button id="voice-record" type="button" aria-pressed="false" disabled>Hold to speak</button>
+    <button id="voice-undo" type="button" disabled>Undo creation</button>
+    <div id="voice-status" role="status" aria-live="polite">Connecting to local voice service…</div>
+    <div class="hint">Simple shapes assembled by Muse Wonder. Look → pinch to move the whole object.</div>
+  </section>
   <div id="calibration" hidden>
     <div id="calibration-copy">
       <strong>Webcam gaze calibration</strong>

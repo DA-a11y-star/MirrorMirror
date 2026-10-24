@@ -4,3 +4,5 @@ numpy
 pynput
 websockets>=15,<16
 certifi
+aiohttp>=3.10,<4
+jsonschema>=4.23,<5
