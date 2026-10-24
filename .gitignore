@@ -1,0 +1,15 @@
+# Local Python environment and bytecode
+.venv/
+__pycache__/
+*.py[cod]
+.Python
+
+# MediaPipe face/iris model: downloaded on first run with webcam gaze (~3.8 MB).
+# The hand model is committed.
+face_landmarker.task
+
+# Editor and OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
