@@ -4,7 +4,10 @@ const params = new URLSearchParams(globalThis.location?.search);
 
 export const USER_ID = params.get('user') ?? 'A'; // 'A' or 'B'
 export const HOST_ID = 'A'; // laptop A is the scene authority
-export const RELAY_URL = params.get('relay') ?? 'ws://192.168.1.10:8765'; // laptop A's LAN address
+// The relay runs on laptop A. By default a page looks for it on the machine that served the page, so A finds it at
+// localhost, and B finds it too if B opens A's web server (http://<A's address>:8000/?user=B). Otherwise pass
+// ?relay=ws://<A's address>:8765. No address is hard-coded: it changes with every network.
+export const RELAY_URL = params.get('relay') ?? `ws://${globalThis.location?.hostname || 'localhost'}:8765`;
 export const TRACKER_URL = 'ws://localhost:8766';
 // 'websocket' = local Python tracker; 'mock' = animated hands for camera-free development.
 export const TRACKER_SOURCE = params.get('tracker') ?? 'websocket';

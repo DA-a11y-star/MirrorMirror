@@ -142,7 +142,7 @@ renderer.setAnimationLoop(() => {
     const trackerHz = Math.round(tracker.frames / seconds);
     const parallax = !offAxis.active ? 'parallax waiting for head' : `parallax ${(offAxis.eye.length() * 100).toFixed(0)} cm`;
     const others = [...peers.values()].filter(peer => peer.live).map(peer => peer.user).join(', ');
-    const link = `${net.status}${others ? ` with ${others}` : ''}`;
+    const link = `${net.status}${net.open ? (others ? ` with ${others}` : '') : ` ${RELAY_URL}`}`; // a wrong address shows here
     hud.textContent = `user ${USER_ID}  ·  ${fps} fps  ·  tracker ${tracker.status} ${trackerHz} Hz  ·  relay ${link}  ·  ${parallax}  ·  ${tracker.lastGesture}`;
     frames = 0;
     tracker.frames = 0;

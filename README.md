@@ -147,12 +147,12 @@ The two users stand at opposite ends of the blocks, facing each other. Laptop A 
 # Laptop A only
 .venv/bin/python relay/relay.py
 
-# Each laptop: tracker and web server as above, then open the page
-#   laptop A: http://localhost:8000
-#   laptop B: http://localhost:8000/?user=B&relay=ws://<laptop A's address>:8765
+# Laptop A: tracker and web server as above, then open http://localhost:8000
+# Laptop B: tracker only, then open laptop A's web server:
+#   http://<laptop A's address>:8000/?user=B
 ```
 
-Set `RELAY_URL` in `web/config.js` to laptop A's address (or pass `relay=` in the URL), and `USER_ID` to `'B'` on the second laptop. The HUD shows `relay connected with B` once both are up.
+No address is written into the app, because it changes with every network. A page looks for the relay on the machine that served the page: laptop A finds it at `localhost`, and laptop B finds it by opening A's web server, which also means B runs A's copy of the page. B still runs its own tracker on its own camera. Find A's address with `ipconfig getifaddr en0` (or Wi-Fi settings). If B serves its own copy of the page instead, add `&relay=ws://<A's address>:8765` to the URL. The HUD shows `relay connected with B` on A and `relay connected with A` on B once both are up. While a page can't reach the relay, the HUD shows the address it is trying, so a wrong one is easy to spot.
 
 What each user sees of the other: a blue bust at their eye position, a head that turns with theirs, their hands next to them, a violet glow on the block they are looking at, and a brighter glow on the block they are holding. Their avatar disappears 0.7 s after they stop sending.
 
@@ -171,7 +171,7 @@ If the laptops can't reach each other, some venue Wi-Fi isolates clients from ea
 |---|---|
 | `USER_ID` | `'A'` or `'B'`, which end of the blocks you stand at. Override with `?user=B` in the page URL |
 | `HOST_ID` | The scene authority, `'A'` |
-| `RELAY_URL` | Laptop A's address, `ws://<address>:8765`. The default is a placeholder. Override with `?relay=...` in the page URL |
+| `RELAY_URL` | Where the relay is. Defaults to port 8765 on the machine that served the page. Override with `?relay=ws://<address>:8765` in the page URL |
 | `TRACKER_URL` | Local tracker WebSocket, `ws://localhost:8766` |
 | `TRACKER_SOURCE` | `'websocket'` for the local Python tracker (default), or `'mock'`. Override with `?tracker=mock` in the page URL |
 | `GAZE_SOURCE` | `'webcam'` (calibrated iris features, default), `'external'` (tracker-provided screen coordinates), or `'pointer'` (mouse, development). Ignored in mock mode, which always uses the pointer |
