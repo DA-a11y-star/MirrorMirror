@@ -7,7 +7,9 @@ import { encodeWav } from '../web/voice.js';
 async function load(name) {
   const path = new URL(`../web/${name}.js`, import.meta.url);
   const three = new URL('../web/vendor/three.module.js', import.meta.url).href;
-  const source = (await readFile(path, 'utf8')).replaceAll("from 'three'", `from '${three}'`);
+  const protocol = new URL('../web/object-protocol.js', import.meta.url).href;
+  const source = (await readFile(path, 'utf8')).replaceAll("from 'three'", `from '${three}'`)
+    .replaceAll("from './object-protocol.js'", `from '${protocol}'`);
   return import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
 }
 const { Objects, createAssembly } = await load('objects');

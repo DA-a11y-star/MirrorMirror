@@ -32,10 +32,10 @@ const view = offAxis.view;
 const gaze = new GazeInput(TRACKER_SOURCE === 'mock' ? 'pointer' : GAZE_SOURCE);
 const interaction = new Interaction(blocks, camera, hands, view, { onLearn: sample => gaze.learn(sample) });
 const gazeUI = new GazeUI(gaze, () => interaction.releaseAll());
-const sync = new SceneSync(blocks, { userId: USER_ID, hostId: HOST_ID });
+const objects = new Objects(blocks, interaction);
+const sync = new SceneSync(blocks, { userId: USER_ID, hostId: HOST_ID, objects });
 const peers = new Map(); // user id -> RemoteAvatar
 const heldIds = () => new Set([...interaction.grabs.values()].map(grab => grab.mesh.userData.id));
-const objects = new Objects(blocks, interaction);
 const voiceUI = new VoiceUI(VOICE_URL, objects);
 window.app = { renderer, scene, camera, view, hands, blocks, interaction, gaze, gazeUI, offAxis, sync, peers, objects, voiceUI }; // dev console
 
@@ -96,6 +96,10 @@ function onNetMessage(msg) {
     for (const id of sync.applyState(msg, now, heldIds())) interaction.drop(id);
   } else if (msg.type === 'scene') {
     sync.applyScene(msg, now, heldIds());
+    voiceUI.refresh();
+  } else if (msg.type === 'op') {
+    sync.applyOp(msg);
+    voiceUI.refresh();
   }
 }
 const net = new Net(RELAY_URL, USER_ID, onNetMessage, () => {});
@@ -182,6 +186,7 @@ renderer.setAnimationLoop(() => {
   });
   renderer.render(scene, view);
 
+  sync.flushOps(now, msg => net.send(msg));
   if (now - lastSent >= 1000 / STATE_HZ) {
     lastSent = now;
     net.send(buildState(heldIds()));

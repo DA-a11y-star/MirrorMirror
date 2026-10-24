@@ -14,7 +14,7 @@ A shared 3D block-modeling workspace driven by eyes, hands, and voice, built for
 | 4. Gaze highlight, pinch to grab | Implemented, awaiting user review: calibrated webcam gaze (replaceable provider) and local grab-and-move. Tests and a headless-browser run pass; accuracy on real eyes is not yet validated |
 | 5. Relay and second user | Implemented, awaiting user review: relay, face-to-face avatars with the other user's head and hands, block ownership and scene sync. Unit tests and a two-browser headless run through the real relay pass; not yet tried on two laptops or with a real head |
 | 6. Depth effect | Implemented; composes with the movement camera and follows tracked head position |
-| 7. Voice-to-CAD | Implemented locally on `main`: Muse transcription → Muse Wonder primitive assemblies; live API and synthetic-microphone browser checks pass; real-user rehearsal pending |
+| 7. Voice-to-CAD | Muse transcription → Muse Wonder primitive assemblies, shared through the relay with creation, movement, undo and late-join reconstruction; real-user rehearsal pending |
 | 8. Polish | Queued: **8a fast-motion tracking recovery**, **8b side-profile stability**, then **8c sound/feedback/visuals** |
 
 The browser tracker reuses the sensing algorithms from the standalone OpenCV prototype (`hand_mouse.py`). Shared camera geometry, gesture classification and One Euro filtering now live in `tracker/`; the prototype imports these same helpers.
@@ -58,6 +58,7 @@ web/
   remote-avatar.js     The other user: their walking body, head turn, hands, and what they are looking at
   mock.js              Camera-free tracker for development using the same protocol
   objects.js           Primitive assembly rendering, free-space placement, undo and disposal
+  object-protocol.js   Validated render-only assembly format for relay operations and scene snapshots
   voice.js             Browser recording, local WAV conversion and voice WebSocket client
   voice-ui.js          Push-to-talk, editable descriptions and generation progress
   vendor/              three.js 0.186.1 and OrbitControls, vendored (never load from a CDN)
@@ -220,16 +221,24 @@ Good demo prompts:
 
 Wonder chooses boxes, ellipsoids, cylinders and cones, colors, dimensions, rotations and placement relationships. Python validates finite values, dimensions, IDs and references; resolves touching bounding faces and symmetric `corners_below` supports; rejects cycles and more than 40 expanded parts; and centers/grounds the object. The default largest dimension is 0.8 m; explicit requested dimensions are supported from 0.1 to 3 m. One model repair attempt handles invalid layouts. Three.js renders each assembly as a group of meshes with shared unit geometries, independent standard materials and shadows. New objects register with gaze targeting immediately; undo unregisters them and releases materials.
 
-**Current scope.** Voice creation and undo work locally, alongside shared starter blocks, remote avatars, walking/flying and camera modes. Generated assemblies are deliberately excluded from relay snapshots until assembly creation/deletion ops are implemented; grabbing a local assembly does not interrupt shared-block synchronization. Follow-up editing commands (such as “make it taller”), arbitrary triangle mesh generation, physics, scene persistence and sharing generated assemblies are future work. Specs have stable assembly/part IDs and explicit transforms for later relay integration. An editable transcript corrects recognition errors; typed descriptions exercise the same planner. Live transcription accuracy, model latency and object quality need a rehearsal with your API account and microphone.
+**Shared generated objects.** Generation runs only on the device where the command was spoken or typed. After that device renders and places the result, it sends an `op:add` containing the render recipe: primitive kinds, sizes, colors, part-local transforms and the assembly's exact world transform. The receiving laptop builds the same meshes in the same world location; it does not re-run placement, transcription or the LLM. Audio, transcripts, prompts, model requests and API keys never go through the relay. The receiver does not need an API key or a voice service to see or grab shared objects.
+
+Laptop A remains the scene authority. Guest additions and deletions retry until a host scene acknowledges the exact operation. Host snapshots include assembly definitions, so joining/reloading laptops reconstruct existing generated objects, and reconnecting laptops catch missed deletions. Undo removes the generating user's most recent creation on every device. A received object is not added to the receiver's undo history. Generated assemblies use the same root-transform ownership rules, remote highlights, smoothing and post-release grace as starter blocks. If the relay or host is offline, the result appears locally and its edit remains queued until connectivity returns.
+
+To rehearse on two laptops, run the relay on A and connect both pages to it as described above. Run `python -m voice.main` with `MODEL_API_KEY` only on a laptop doing generation. For microphone capture, serve that laptop's page locally at `http://localhost:8000` and use `?user=B&relay=ws://<A's address>:8765` on B. The other laptop can simply observe the scene without starting its voice service. Refresh both pages after updating the code so they understand the new assembly packets.
+
+**Current scope.** Shared creation, grabbing/movement and undo work alongside remote avatars, walking/flying and camera modes. Follow-up editing commands (such as “make it taller”), arbitrary triangle mesh generation, physics and persistent scenes are future work. The in-memory host scene resets if laptop A reloads. An editable transcript corrects recognition errors; typed descriptions exercise the same planner.
 
 Checks (no API key or camera required):
 
 ```bash
 .venv/bin/python -m unittest discover -s tests -p 'test_voice.py' -v
-node --test tests/objects.test.mjs tests/voice.test.mjs tests/interaction.test.mjs
+node --test tests/assembly-sync.test.mjs tests/objects.test.mjs tests/voice.test.mjs tests/interaction.test.mjs tests/net.test.mjs tests/sync.test.mjs
 ```
 
 These exercise symmetric connected layouts, rotated bounds, invalid relationships, audio format/limits, Meta request contracts against a local HTTP server, the real local WebSocket pipeline with a fake model, dynamically added compound-object targeting/highlighting/grabbing, floor constraints, collision-free spawn placement, disposal and WAV sample encoding. They do not call the live Meta API.
+
+Assembly relay checks also cover host and guest creation, render-only packet contents, exact world placement, idempotent retries, ownership streams, deletion acknowledgements, stale-scene handling, deletion while grabbed, and late joins/reconnects.
 
 A separate live smoke check transcribed synthesized “Create a blue chair with wooden legs” through Muse Voice Transcribe and successfully generated a validated 13-part chair with Muse Wonder. A headless Chrome smoke check also exercised real MediaRecorder/Web Audio with a synthetic microphone, WAV upload, typed and spoken creation against a local fake model, WebGL rendering, transcript display and undo without browser exceptions. Real-user microphone quality and gaze/grab feel still need a manual demo rehearsal.
 

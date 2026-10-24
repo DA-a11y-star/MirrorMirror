@@ -1,5 +1,6 @@
 // Multiplayer transport. The relay forwards every message to the other laptops and keeps no state, so this file
 // owns the message envelope and checks everything another laptop sends before the rest of the app sees it.
+import { MAX_OBJECTS, validAssemblyObject } from './object-protocol.js';
 const RETRY_MS = 1000;
 const MAX_BUFFERED = 1 << 20; // bytes; a state snapshot that would queue behind a stalled link is dropped, not delayed
 
@@ -22,14 +23,24 @@ export function validState(msg) {
 
 export function validScene(msg) {
   return !!msg && msg.type === 'scene' && typeof msg.user === 'string' && Number.isFinite(msg.seq) &&
-    Array.isArray(msg.objects) && msg.objects.length <= 64 && msg.objects.every(pose);
+    Array.isArray(msg.objects) && msg.objects.length <= MAX_OBJECTS &&
+    msg.objects.every(o => pose(o) && (o.kind !== 'assembly' || validAssemblyObject(o))) &&
+    new Set(msg.objects.map(o => o.id)).size === msg.objects.length &&
+    (msg.deleted == null || (Array.isArray(msg.deleted) && msg.deleted.every(id => typeof id === 'string'))) &&
+    (msg.acks == null || (Array.isArray(msg.acks) && msg.acks.every(id => typeof id === 'string')));
 }
 
-const VALID = { state: validState, scene: validScene };
+export function validOp(msg) {
+  return !!msg && msg.type === 'op' && typeof msg.user === 'string' && Number.isFinite(msg.seq) &&
+    typeof msg.opId === 'string' && msg.opId.length > 0 && msg.opId.length <= 200 &&
+    (msg.op === 'add' ? validAssemblyObject(msg.obj) :
+      msg.op === 'delete' && !!msg.obj && typeof msg.obj.id === 'string' && msg.obj.id.length > 0 && msg.obj.id.length <= 100);
+}
+
+const VALID = { state: validState, scene: validScene, op: validOp };
 
 export class Net {
-  // onMessage receives validated `state` and `scene` messages from other users. Other types (the `op` edits arrive
-  // with voice-to-CAD) are ignored for now.
+  // onMessage receives validated snapshots and generated-object add/delete operations.
   constructor(url, userId, onMessage, onStatus, { WebSocketClass = WebSocket } = {}) {
     this.url = url;
     this.userId = userId;
@@ -75,7 +86,7 @@ export class Net {
     try { msg = JSON.parse(data); } catch { return; }
     const valid = VALID[msg?.type];
     if (!valid || !valid(msg) || msg.user === this.userId) return;
-    // Every message is a full snapshot, so anything older than what we already have is simply dropped.
+    // WebSockets preserve send order. Repeated/old snapshots and operation deliveries are dropped per sender/type.
     const key = `${msg.user}:${msg.type}`;
     if (msg.seq <= (this.lastSeq.get(key) ?? -Infinity)) return;
     this.lastSeq.set(key, msg.seq);

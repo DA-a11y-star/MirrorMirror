@@ -7,7 +7,9 @@ import * as THREE from '../web/vendor/three.module.js';
 async function load(name) {
   const path = new URL(`../web/${name}.js`, import.meta.url);
   const three = new URL('../web/vendor/three.module.js', import.meta.url).href;
-  const source = (await readFile(path, 'utf8')).replaceAll("from 'three'", `from '${three}'`);
+  const protocol = new URL('../web/object-protocol.js', import.meta.url).href;
+  const source = (await readFile(path, 'utf8')).replaceAll("from 'three'", `from '${three}'`)
+    .replaceAll("from './object-protocol.js'", `from '${protocol}'`);
   return import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
 }
 const { SceneSync } = await load('sync');
@@ -130,7 +132,7 @@ test('a laptop that goes quiet loses its holds', () => {
   assert.equal(s.sync.holders.size, 0);
 });
 
-test('holding a local voice assembly leaves relay snapshots valid and shared block ownership intact', () => {
+test('an unregistered object cannot break relay snapshots or shared block ownership', () => {
   const s = setup('A');
   const local = new THREE.Group();
   local.userData.id = 'generated-local-chair';

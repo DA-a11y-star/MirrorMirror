@@ -49,11 +49,11 @@ All messages are JSON, which is fine at this size on a LAN. Optimize only if mea
  "avatar":{"pos":[x,y,z],"vel":[x,y,z],"yaw":0,"pitch":0,"flying":false},"head":{"quat":[x,y,z,w]}|null,"target":"b3"|null,
  "hands":[{"side","pinch","lm":[[x,y,z],...21]}],
  "held":[{"id":"b7","pos":[...],"quat":[...]}]}                    // ~30 Hz
-{"type":"op","user":"A","op":"add|delete|color","obj":{...}}       // discrete edits
-{"type":"scene","user":"A","seq":124,"objects":[{"id","kind","pos","quat","scale","color"}]}  // host, ~10 Hz
+{"type":"op","user":"A","seq":124,"opId":"A:...","op":"add|delete","obj":{...}} // render-only assembly edit
+{"type":"scene","user":"A","seq":125,"acks":["A:..."],"deleted":[],"objects":[{"id","kind","pos","quat","scale","color"}]} // host, ~10 Hz; assemblies include spec
 ```
 
-`avatar` is the sender's walking avatar, exactly `Locomotion.state()` (feet position, velocity, yaw, head pitch, fly state); the receiver drives its own `Avatar` body with it, so walk, lean and bob look the same on both laptops. Free cam never moves the avatar, so it isn't sent. The two users spawn at opposite ends of the blocks, facing each other (`SPAWNS` in `scene.js`). `head.quat` is the tracker's head rotation, converted in `headQuaternion` in `avatar.js`. `target` is the block the sender is looking at (the other laptop shows it as a violet glow). `hands` are the landmarks from the sender's tracker frame, drawn through the sender's seat. Messages without `op` handling are ignored until voice-to-CAD needs them.
+`avatar` is the sender's walking avatar, exactly `Locomotion.state()` (feet position, velocity, yaw, head pitch, fly state); the receiver drives its own `Avatar` body with it, so walk, lean and bob look the same on both laptops. Free cam never moves the avatar, so it isn't sent. The two users spawn at opposite ends of the blocks, facing each other (`SPAWNS` in `scene.js`). `head.quat` is the tracker's head rotation, converted in `headQuaternion` in `avatar.js`. `target` is the block the sender is looking at (the other laptop shows it as a violet glow). `hands` are the landmarks from the sender's tracker frame, drawn through the sender's seat. Assembly `op:add` packets carry `obj: {id, kind: "assembly", spec, pos, quat, scale}`; `spec` contains only version, id/name and primitive render parts. `op:delete` carries `obj: {id}`. Audio, transcripts, prompts and model/API requests stay on the generating device.
 
 Rules:
 - Each `state` message is a full snapshot. Drop anything with an older `seq`.
@@ -81,9 +81,9 @@ Rules:
 2. Tracker streams hands to the browser, which draws them — accepted by user: movement and responsiveness are okay
 3. One avatar walks via the finger-puppet gesture
 4. Gaze highlights a block, and pinch grabs and moves it — implemented, awaiting user review: calibrated webcam gaze (9-point, `web/gaze.js`), replaceable gaze provider (`PROVIDERS` in `tracker/gaze.py`, or `external` source in the browser), local manipulation (`web/interaction.js`), forgiving gaze targeting (snap radius, hysteresis, blink grace) and calibration that refines itself from confirmed grabs. Automated tests and a headless-browser E2E pass; real-eye accuracy is not yet validated.
-5. Relay shows the second user's avatar, hands, and edits — implemented, awaiting user review: `relay/relay.py`, `web/net.js` (envelope, validation, reconnect, seq dedupe), `web/sync.js` (ownership, host scene, easing), `web/avatar.js` (bust, head, remote hands, gaze glow). Unit tests and a two-browser headless run through the real relay pass; not yet tried on two laptops or with a real head. `add|delete|color` ops wait for voice-to-CAD (milestone 7).
+5. Relay shows the second user's avatar, hands, and edits — implemented, awaiting user review: `relay/relay.py`, `web/net.js` (envelope, validation, reconnect, seq dedupe), `web/sync.js` (ownership, host scene, easing), `web/avatar.js` (bust, head, remote hands, gaze glow). Unit tests and a two-browser headless run through the real relay pass; not yet tried on two laptops or with a real head. Assembly `add|delete` ops are integrated with voice-to-CAD (milestone 7).
 6. Depth effect
-7. Voice-to-CAD
+7. Voice-to-CAD — implemented: local Muse transcription and Wonder planning produce primitive assemblies. The generating browser sends render-only `op:add|delete` messages through the relay; host scene snapshots include assembly definitions, operation acknowledgements and deletion tombstones. Remote browsers reconstruct geometry without invoking voice/LLM APIs. Generated roots use the same ownership/movement rules as starter blocks. See `web/object-protocol.js`, `web/objects.js`, `web/sync.js` and `voice/`.
 8. Polish (in this priority order):
    - **8a. Fast-motion hand tracking/reacquisition.** User observed tracking loss during rapid movement. Measure capture/inference latency and motion blur; tune reacquisition/hold behavior without introducing sticky grabs or noticeable lag.
    - **8b. Side-profile hand stability.** User observed weak tracking when the hand is edge-on. Evaluate landmark confidence, pose fitting and identity stability during rotation; recover smoothly when the palm returns.

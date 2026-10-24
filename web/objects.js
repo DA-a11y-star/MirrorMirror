@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { MAX_OBJECTS, renderSpec } from './object-protocol.js';
 
 // Unit geometry is shared; each part gets its own material for gaze feedback.
 const geometries = new Map();
@@ -17,9 +18,7 @@ function geometry(shape) {
 }
 
 export function createAssembly(spec) {
-  if (spec.version !== 1 || !Array.isArray(spec.parts) || !spec.parts.length || spec.parts.length > 40) {
-    throw new Error('Invalid object specification');
-  }
+  spec = renderSpec(spec);
   const root = new THREE.Group();
   root.name = spec.name;
   root.userData.id = spec.id;
@@ -32,12 +31,12 @@ export function createAssembly(spec) {
       mesh.name = part.id;
       mesh.scale.fromArray(part.size);
       mesh.position.fromArray(part.position);
-      mesh.quaternion.fromArray(part.quaternion);
+      mesh.quaternion.fromArray(part.quaternion).normalize();
       mesh.castShadow = mesh.receiveShadow = true;
       root.add(mesh);
     }
     root.position.fromArray(spec.position);
-    root.quaternion.fromArray(spec.quaternion);
+    root.quaternion.fromArray(spec.quaternion).normalize();
     return root;
   } catch (error) {
     disposeAssembly(root);
@@ -57,8 +56,20 @@ export class Objects {
     this.history = [];
   }
 
-  add(spec) {
+  add(spec, { place = true, remember = true, notify = true } = {}) {
+    const existing = this.container.children.find(root => root.userData.id === spec.id);
+    if (existing) return existing;
+    if (this.container.children.length >= MAX_OBJECTS) throw new Error('Workspace is full. Undo an object to make room');
     const root = createAssembly(spec);
+    if (place) this.place(root);
+    this.container.add(root);
+    this.interaction.register(root);
+    if (remember) this.history.push(root);
+    if (notify) this.onAdd?.(root);
+    return root;
+  }
+
+  place(root) {
     // Try center first, then nearby spots. Keep growth in a small demo workspace.
     const candidates = [[0, 0]];
     for (let ring = 1; ring <= 4; ring++) {
@@ -84,17 +95,20 @@ export class Objects {
       disposeAssembly(root);
       throw new Error('Workspace is full. Undo an object to make room');
     }
-    this.container.add(root);
-    this.interaction.register(root);
-    this.history.push(root);
-    return root;
+  }
+
+  remove(id, { notify = true } = {}) {
+    const root = this.container.children.find(root => root.userData.id === id && root.userData.spec);
+    if (!root) return false;
+    this.history = this.history.filter(item => item !== root);
+    this.interaction.unregister(root);
+    disposeAssembly(root);
+    if (notify) this.onRemove?.(root);
+    return true;
   }
 
   undo() {
-    const root = this.history.pop();
-    if (!root) return false;
-    this.interaction.unregister(root);
-    disposeAssembly(root);
-    return true;
+    const root = this.history.at(-1);
+    return root ? this.remove(root.userData.id) : false;
   }
 }
