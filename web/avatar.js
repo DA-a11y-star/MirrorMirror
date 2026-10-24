@@ -1,102 +1,101 @@
 import * as THREE from 'three';
 
-// The other user: a floating bust at their eye position, a head that turns with theirs, and their hands. Each
-// laptop sends its own base camera pose, so the avatar sits wherever that user's view is.
-const STALE_MS = 700;   // a peer that stops sending disappears
-const FOLLOW_RATE = 21; // 1/s; eases 30 Hz updates into 60 fps motion, the same as remote blocks
-const HEAD_RADIUS = 0.11;
-const TORSO_DROP = 0.52; // eye height to the middle of the torso
-const BODY = 0x4c6ef5;
-const SKIN = 0xf3ede6;
-const VISOR = 0x24334a;
+// A simple body + head. update() takes the same snapshot a remote peer would send (`pos`, `vel`, `yaw`, `pitch`,
+// `flying`) and derives the bob, lean and body turn locally, so local and remote avatars animate identically.
+export const EYE_HEIGHT = 1.4;
+const HEAD_HEIGHT = 1.32;
+const WALK_SPEED_REF = 2; // m/s, speed at which the walk bob and lean reach their nominal size
+const BODY_TURN_RATE = 8; // 1/s, how fast the body yaw eases toward the movement direction
+const LEAN_RATE = 8;
+const MAX_LEAN = 0.2; // radians
 
-// The one place that maps the tracker's head rotation into the world. The tracker works on the mirrored webcam
-// image (x toward the user's right, y down, z toward the user), which is a reflection of the viewer's camera
-// frame (x right, y up, z toward the viewer), so the rotation is conjugated by the y flip: (x, y, z, w) ->
-// (-x, y, -z, w). A frontal face is the identity. Derived from the tracker's conventions, not yet checked
-// against a real head: if the avatar turns the wrong way, fix it here.
-export function headQuaternion(q, out = new THREE.Quaternion()) {
-  return out.set(-q[0], q[1], -q[2], q[3]);
-}
+const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
+const ease = (rate, dt) => 1 - Math.exp(-rate * dt);
 
-export class RemoteAvatar {
-  // `hands` is a Hands instance reserved for this user; their landmarks are drawn through their own seat.
-  constructor(scene, user, hands) {
-    this.user = user;
-    this.hands = hands;
-    this.seat = new THREE.Object3D(); // the user's base camera: where they sit and which way they look
-    this.targetPos = new THREE.Vector3();
-    this.targetQuat = new THREE.Quaternion();
-    this.headTarget = new THREE.Quaternion(); // head rotation relative to the seat
-    this.headRel = new THREE.Quaternion();
-    this.euler = new THREE.Euler();
-    this.targetBlock = null; // latest id they reported looking at
-    this.looking = null; // the same, but null while the avatar is gone
-    this.lastSeen = -Infinity;
-    this.fresh = true;
-
+export class Avatar {
+  constructor(scene, color = 0x4c6ef5) {
     this.root = new THREE.Group();
-    this.root.visible = false;
-    this.torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.16, 0.45, 6, 16),
-      new THREE.MeshStandardMaterial({ color: BODY, roughness: 0.6 }));
+    this.root.name = 'avatar';
+
+    this.body = new THREE.Group();
+    this.body.rotation.order = 'YXZ';
+    const material = new THREE.MeshStandardMaterial({ color, roughness: 0.5 });
+    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.8, 6, 16), material);
+    torso.position.y = 0.6; // spans 0 to 1.2 m, meeting the head
+    this.body.add(torso);
+
     this.head = new THREE.Group();
-    const skull = new THREE.Mesh(new THREE.SphereGeometry(HEAD_RADIUS, 24, 16),
-      new THREE.MeshStandardMaterial({ color: SKIN, roughness: 0.5 }));
-    // The visor sits on the -z side: the head faces down its own -z, like a camera, when the rotation is the identity.
-    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.045, 0.05),
-      new THREE.MeshStandardMaterial({ color: VISOR, roughness: 0.3 }));
-    visor.position.set(0, 0.01, -HEAD_RADIUS * 0.88);
+    this.head.rotation.order = 'YXZ';
+    this.head.position.y = HEAD_HEIGHT;
+    const skull = new THREE.Mesh(
+      new THREE.SphereGeometry(0.16, 20, 14),
+      new THREE.MeshStandardMaterial({ color: 0xf3ede6, roughness: 0.45 }),
+    );
+    const visor = new THREE.Mesh( // marks which way the head faces (-z locally)
+      new THREE.BoxGeometry(0.2, 0.07, 0.1),
+      new THREE.MeshStandardMaterial({ color: 0x24334a, roughness: 0.3 }),
+    );
+    visor.position.set(0, 0.02, -0.13);
     this.head.add(skull, visor);
-    for (const mesh of [this.torso, skull, visor]) mesh.castShadow = true;
-    this.root.add(this.torso, this.head);
-    scene.add(this.seat, this.root);
+
+    this.root.add(this.body, this.head);
+    for (const mesh of [torso, skull, visor]) mesh.castShadow = true;
+    scene.add(this.root);
+
+    this.bodyYaw = 0;
+    this.bob = 0; // vertical offset in meters, also read by the first-person camera
+    this.leanForward = 0;
+    this.leanSide = 0;
+    this.phase = 0;
+    this.time = 0;
+    this._f = new THREE.Vector3();
+    this._r = new THREE.Vector3();
   }
 
-  // A validated `state` message from this user.
-  setState(msg, now) {
-    this.targetPos.fromArray(msg.avatar.pos);
-    this.targetQuat.fromArray(msg.avatar.quat).normalize();
-    if (msg.head) headQuaternion(msg.head.quat, this.headTarget).normalize();
-    else this.headTarget.identity();
-    this.hands.setFrame(msg.hands);
-    this.targetBlock = msg.target ?? null;
-    this.lastSeen = now;
+  setHeadVisible(visible) {
+    this.head.visible = visible;
   }
 
-  get live() {
-    return this.root.visible;
+  // The whole avatar (body, head and shadow): hidden from its own owner in first person.
+  setVisible(visible) {
+    this.root.visible = visible;
   }
 
-  update(dt, now) {
-    if (now - this.lastSeen > STALE_MS) {
-      if (this.root.visible) {
-        this.root.visible = false;
-        this.hands.setFrame([]);
-        this.fresh = true;
-      }
-      this.looking = null;
-      this.hands.update(dt, this.seat);
-      return;
-    }
-    const k = 1 - Math.exp(-FOLLOW_RATE * dt);
-    if (this.fresh) {
-      this.seat.position.copy(this.targetPos);
-      this.seat.quaternion.copy(this.targetQuat);
-      this.headRel.copy(this.headTarget);
-      this.fresh = false;
+  update(state, dt) {
+    dt = Math.min(Math.max(dt, 0), 0.05);
+    this.time += dt;
+    const [vx, , vz] = state.vel;
+    const speed = Math.hypot(vx, vz);
+    const moving = THREE.MathUtils.clamp(speed / WALK_SPEED_REF, 0, 1.5);
+
+    // Body turn: face the way you move, folded so that walking backwards doesn't spin the avatar around.
+    this._f.set(-Math.sin(state.yaw), 0, -Math.cos(state.yaw));
+    this._r.set(Math.cos(state.yaw), 0, -Math.sin(state.yaw));
+    let rel = Math.atan2(-(vx * this._r.x + vz * this._r.z), vx * this._f.x + vz * this._f.z);
+    if (Math.abs(rel) > Math.PI / 2) rel -= Math.sign(rel) * Math.PI;
+    const weight = THREE.MathUtils.clamp((speed - 0.2) / 0.8, 0, 1);
+    const target = state.yaw + rel * 0.6 * weight;
+    this.bodyYaw = wrap(this.bodyYaw + wrap(target - this.bodyYaw) * ease(BODY_TURN_RATE, dt));
+
+    // Lean into the motion, measured in the body's own frame.
+    const bf = -Math.sin(this.bodyYaw);
+    const bz = -Math.cos(this.bodyYaw);
+    const forward = (vx * bf + vz * bz) / WALK_SPEED_REF;
+    const side = (vx * Math.cos(this.bodyYaw) + vz * -Math.sin(this.bodyYaw)) / WALK_SPEED_REF;
+    const k = ease(LEAN_RATE, dt);
+    this.leanForward += (THREE.MathUtils.clamp(forward, -1, 1) * MAX_LEAN - this.leanForward) * k;
+    this.leanSide += (THREE.MathUtils.clamp(side, -1, 1) * MAX_LEAN - this.leanSide) * k;
+    this.body.rotation.set(-this.leanForward, this.bodyYaw, -this.leanSide);
+
+    // Walking bobs with each step; hovering drifts gently up and down.
+    if (state.flying) {
+      this.bob = Math.sin(this.time * 2.2) * 0.04;
     } else {
-      this.seat.position.lerp(this.targetPos, k);
-      this.seat.quaternion.slerp(this.targetQuat, k);
-      this.headRel.slerp(this.headTarget, k);
+      this.phase += dt * moving * Math.PI * 2 * 1.6;
+      this.bob = Math.abs(Math.sin(this.phase)) * 0.04 * Math.min(moving, 1);
     }
-    this.seat.updateMatrixWorld();
-    this.head.position.copy(this.seat.position);
-    this.head.quaternion.copy(this.seat.quaternion).multiply(this.headRel);
-    // The body turns with the user's view but not with its pitch or their head.
-    this.torso.position.set(this.seat.position.x, this.seat.position.y - TORSO_DROP, this.seat.position.z);
-    this.torso.rotation.set(0, this.euler.setFromQuaternion(this.seat.quaternion, 'YXZ').y, 0);
-    this.root.visible = true;
-    this.looking = this.targetBlock;
-    this.hands.update(dt, this.seat);
+
+    this.root.position.set(state.pos[0], state.pos[1] + this.bob, state.pos[2]);
+    this.head.rotation.set(state.pitch, state.yaw, 0);
   }
 }

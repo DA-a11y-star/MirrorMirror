@@ -20,7 +20,7 @@ Existing code: shared hand sensing lives in `tracker/hands.py`, `tracker/gesture
 tracker/   main.py, hands.py, gaze.py, gestures.py, filters.py (One Euro)
 relay/     relay.py
 web/       index.html, main.js, config.js, scene.js, avatar.js, hands.js,
-           interaction.js, locomotion.js, net.js, sync.js, offaxis.js, vendor/three.module.js
+           interaction.js, locomotion.js, input.js, camera.js, dev.js, net.js, sync.js, remote-avatar.js, offaxis.js, vendor/three.module.js
 ```
 
 ## Running
@@ -46,14 +46,14 @@ All messages are JSON, which is fine at this size on a LAN. Optimize only if mea
 **web → relay → other web**
 ```json
 {"type":"state","user":"A","seq":123,
- "avatar":{"pos":[x,y,z],"quat":[x,y,z,w]},"head":{"quat":[x,y,z,w]}|null,"target":"b3"|null,
+ "avatar":{"pos":[x,y,z],"vel":[x,y,z],"yaw":0,"pitch":0,"flying":false},"head":{"quat":[x,y,z,w]}|null,"target":"b3"|null,
  "hands":[{"side","pinch","lm":[[x,y,z],...21]}],
  "held":[{"id":"b7","pos":[...],"quat":[...]}]}                    // ~30 Hz
 {"type":"op","user":"A","op":"add|delete|color","obj":{...}}       // discrete edits
 {"type":"scene","user":"A","seq":124,"objects":[{"id","kind","pos","quat","scale","color"}]}  // host, ~10 Hz
 ```
 
-`avatar` is the sender's base camera pose, so each laptop's seat is wherever its user's view is. The two users start at opposite ends of the blocks, facing each other (`SEATS` in `scene.js`). `head.quat` is the tracker's head rotation, converted in `headQuaternion` in `avatar.js`. `target` is the block the sender is looking at (the other laptop shows it as a violet glow). `hands` are the landmarks from the sender's tracker frame, drawn through the sender's seat. Messages without `op` handling are ignored until voice-to-CAD needs them.
+`avatar` is the sender's walking avatar, exactly `Locomotion.state()` (feet position, velocity, yaw, head pitch, fly state); the receiver drives its own `Avatar` body with it, so walk, lean and bob look the same on both laptops. Free cam never moves the avatar, so it isn't sent. The two users spawn at opposite ends of the blocks, facing each other (`SPAWNS` in `scene.js`). `head.quat` is the tracker's head rotation, converted in `headQuaternion` in `avatar.js`. `target` is the block the sender is looking at (the other laptop shows it as a violet glow). `hands` are the landmarks from the sender's tracker frame, drawn through the sender's seat. Messages without `op` handling are ignored until voice-to-CAD needs them.
 
 Rules:
 - Each `state` message is a full snapshot. Drop anything with an older `seq`.
