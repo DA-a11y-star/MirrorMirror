@@ -143,7 +143,8 @@ renderer.setAnimationLoop(() => {
     const parallax = !offAxis.active ? 'parallax waiting for head' : `parallax ${(offAxis.eye.length() * 100).toFixed(0)} cm`;
     const others = [...peers.values()].filter(peer => peer.live).map(peer => peer.user).join(', ');
     const link = `${net.status}${net.open ? (others ? ` with ${others}` : '') : ` ${RELAY_URL}`}`; // a wrong address shows here
-    hud.textContent = `user ${USER_ID}  ·  ${fps} fps  ·  tracker ${tracker.status} ${trackerHz} Hz  ·  relay ${link}  ·  ${parallax}  ·  ${tracker.lastGesture}`;
+    const infer = tracker.frame?.infer_ms != null ? ` (${tracker.frame.infer_ms} ms)` : '';
+    hud.textContent = `user ${USER_ID}  ·  ${fps} fps  ·  tracker ${tracker.status} ${trackerHz} Hz${infer}  ·  relay ${link}  ·  ${parallax}  ·  ${tracker.lastGesture}  ·  ${interaction.lastEnd}`;
     frames = 0;
     tracker.frames = 0;
     lastHud = now;

@@ -11,6 +11,12 @@ const GRACE = 300;          // the target survives gaze loss or looking away: bl
 // A grab held this long proves the target was right; it then refines webcam calibration (see GazeCalibration.adapt).
 const LEARN_HOLD = 500;
 const LEARN_DWELL = 250;    // the block must have been the supported target this long before the pinch
+// Fast carries blur the fingers, so the pinch can read "open" for a frame or two while the hand is still holding the
+// block. If the hand moved this fast (tracker m/s, palm) within FAST_MEMORY ms before the pinch opened and is still visible, an open
+// pinch must persist OPEN_GRACE ms (0.5 s) before it counts as a release. Slow, deliberate releases stay instant.
+const FAST_SPEED = .5;
+const FAST_MEMORY = 300;
+const OPEN_GRACE = 500;
 
 // Gaze supplies only {x, y, conf}; interaction is independent of webcam vs hardware gaze providers.
 export class Interaction {
@@ -25,6 +31,7 @@ export class Interaction {
     this.onLearn = onLearn;
     this.frame = { hands: [] };
     this.grabs = new Map();
+    this.lastEnd = ''; // why the most recent grab ended, shown on the HUD for tuning
     this.wasPinched = new Set();
     this.remote = { held: new Set(), looking: new Set() }; // block ids other users are holding / looking at
     this.resetTargeting();
@@ -156,7 +163,21 @@ export class Interaction {
     this.track(gaze, enabled, now);
 
     const pinched = new Set(this.frame.hands.filter(h => h.pinching).map(h => h.side));
-    for (const side of this.grabs.keys()) if (!pinched.has(side) || !enabled) this.grabs.delete(side);
+    for (const [side, grab] of this.grabs) {
+      const slot = this.hands.slots.find(slot => slot.side === side);
+      const speed = slot ? slot.velocity[9].length() : 0;
+      if (enabled && pinched.has(side)) {
+        grab.openSince = null;
+        if (speed >= FAST_SPEED) grab.fastAt = now;
+        continue;
+      }
+      grab.openSince ??= now;
+      const visible = this.frame.hands.some(h => h.side === side && !h.held);
+      // "Was it moving fast?" is judged when the pinch opened, not now, so the grace is a full OPEN_GRACE long.
+      if (enabled && visible && grab.openSince - grab.fastAt < FAST_MEMORY && now - grab.openSince < OPEN_GRACE) continue;
+      this.lastEnd = `grab ended: ${!enabled ? 'mode change' : visible ? 'pinch opened' : 'hand lost'} at ${speed.toFixed(2)} m/s`;
+      this.grabs.delete(side);
+    }
     for (const hand of this.frame.hands) {
       if (!this.pinchPosition(hand.side, this.pinch)) continue;
       if (enabled && hand.pinching && !hand.held && !this.wasPinched.has(hand.side) && this.target &&
@@ -167,7 +188,7 @@ export class Interaction {
         this.grabs.set(hand.side, { mesh: this.target, start, pinch: this.pinch.clone(),
           gain: Math.max(1, Math.min(6, depth / Math.max(.1, handDepth))),
           // Only a pinch on a target the gaze was still supporting can teach calibration.
-          startedAt: now, learnable: this.lostSince === null && now - this.targetSince >= LEARN_DWELL,
+          startedAt: now, fastAt: -Infinity, openSince: null, learnable: this.lostSince === null && now - this.targetSince >= LEARN_DWELL,
           rect: this.centralRect(this.target), learned: false });
       }
       const grab = this.grabs.get(hand.side);
