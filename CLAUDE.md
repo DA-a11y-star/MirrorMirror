@@ -83,3 +83,23 @@ Rules:
    - **8c. Sound, feedback, visuals and complete two-laptop rehearsal.**
 
 Execution order agreed with the user: complete 2 → 4 → 5 first; retain milestone 3 for locomotion, then 6/7 and 8. Stop for user review after each milestone. The two tracking issues above are deferred polish work, not blockers for milestone 4; promote them only if they prevent the core interaction demo.
+
+## M4 gaze quality: deferred options
+The user reports webcam gaze still doesn't feel good. Work on it is parked while M5 is built. Real-eye accuracy has never been measured, so measure before changing the model. Webcam gaze must keep working as the fallback even if an external eye tracker is adopted.
+
+Why it feels bad (from the code; the pixel and degree figures are estimates, not measurements):
+- Blocks are about as small as the gaze error. A 0.4 m block is about 12% of screen height (about 2.4° on a 14" screen at 55 cm). `SNAP_RADIUS` is 0.14 (about 2.8°). Webcam gaze error is typically 3–4°. `b1` and `b2` are stacked and touching.
+- The iris signal is tiny. Capture is 640×480 (`CAPTURE_SIZE` in `tracker/hands.py`), shared with hands, so the iris moves only a few pixels across the whole screen.
+- The model is a linear ridge fit on 4 features: iris offset averaged over both eyes, plus a nose offset as a head cue. Head position and pose are not inputs, though the tracker streams them.
+- `web/offaxis.js` leans the viewpoint toward the gaze (`GAZE_REACH_M`) and head parallax shifts the blocks, so the targets move while being looked at.
+- Smoothing is a fixed exponential in `web/gaze.js`. One Euro is applied only to head position.
+
+Options, roughly in order:
+1. **Measure first.** Add a validation mode with held-out dots that reports mean and p90 error. Record raw features so model variants can be replayed offline on real data.
+2. **Remove confounders.** Test with `PARALLAX_STRENGTH = 0` and `GAZE_REACH_M = 0`. If the lean hurts, freeze it while a block is targeted or held.
+3. **Better signal.** Give the gaze path 1280×720 frames and downscale for hands. Run One Euro on the features in Python.
+4. **Better model.** Per-eye features, `eyeLook*` blendshape scores, head position and pose as regressors, quadratic terms, calibrating with slight head motion. Which helps is unknown; use option 1 to find out.
+5. **Design around the error.** Bigger blocks or a closer camera, the hand as a tiebreaker between nearby blocks, a candidate-cycling gesture.
+6. **Alternatives.** A WebGazer A/B branch (GPL-3.0, opens its own camera, same MediaPipe face model underneath), a head-pointer fallback source from the streamed head orientation, or a hardware tracker through the `external` source.
+
+Other open items: the pinch-release drift (a release margin relative to the tightest squeeze was tried and reverted because grips dropped; untried: anchor the grab to a palm point, or freeze the block instead of releasing) and committing `face_landmarker.task` so the second laptop needs no internet.
