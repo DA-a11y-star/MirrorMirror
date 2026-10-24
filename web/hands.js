@@ -27,6 +27,18 @@ const MAX_HANDS = 2;
 const JOINT_RADIUS = 0.0085;
 const BONE_RADIUS = 0.0055;
 const SMOOTHING_RATE = 25; // 1/s; eases 30 Hz tracker frames into 60 fps motion
+// Fast motion: the farther the drawn hand trails the tracker, the faster it catches up, so slow moves keep the
+// full smoothing and fast ones don't feel rubber-banded.
+const CATCHUP_GAIN = 500;  // extra 1/s per meter of lag (palm)
+const MAX_RATE = 70;       // 1/s
+// Latency hiding: camera + inference + transport put the tracker ~100 ms behind the real hand. During fast moves the
+// target is pushed ahead along the hand's measured velocity. Slow and resting hands get no lead, so pinch precision
+// and jitter are unchanged; it fades if frames stop arriving, and a held (frozen) hand is never extrapolated.
+const LEAD_S = 0.05;                // how far ahead of the last tracker frame to aim
+const LEAD_SPEED = [0.25, 0.7];     // palm speed (m/s) where the lead starts and reaches full strength
+const MAX_LEAD_M = 0.04;            // never aim further than this from the measured landmark
+const LEAD_FADE_S = 0.15;           // no new frame for this long: lead is gone
+const VELOCITY_BLEND = 0.5;         // weight of the newest frame-to-frame velocity
 
 const SKIN = { left: new THREE.Color(0xf3ede6), right: new THREE.Color(0xe9eef5) };
 const PINCH_GLOW = new THREE.Color(0x4c6ef5);
@@ -46,6 +58,10 @@ export class Hands {
       side: null,
       pinch: 0,
       target: Array.from({ length: 21 }, () => new THREE.Vector3()), // latest tracker landmarks
+      velocity: Array.from({ length: 21 }, () => new THREE.Vector3()), // tracker space, m/s, filtered
+      aim: Array.from({ length: 21 }, () => new THREE.Vector3()), // target plus the fast-motion lead
+      t: null, // tracker timestamp of `target`, for velocity
+      frameAt: 0, // performance.now() when `target` arrived
       smoothed: Array.from({ length: 21 }, () => new THREE.Vector3()), // eased toward target, tracker space
       shown: Array.from({ length: 21 }, () => new THREE.Vector3()), // smoothed, mapped to world
       anchor: [new THREE.Vector3(), new THREE.Vector3()], // thumb and index tips mapped through the anchor camera
@@ -74,13 +90,48 @@ export class Hands {
         slot.side = null;
         slot.pinch = 0;
         slot.fresh = true;
+        slot.t = null;
         return;
       }
-      if (slot.side !== hand.side) slot.fresh = true;
+      if (slot.side !== hand.side) {
+        slot.fresh = true;
+        slot.t = null;
+      }
       slot.side = hand.side;
       slot.pinch = hand.pinch;
-      hand.lm.forEach((p, i) => slot.target[i].fromArray(p));
+      // Only a genuinely new observation updates velocity; a held repeat of the last pose carries no information.
+      const isNew = Number.isFinite(hand.t) && hand.t !== slot.t && !hand.held;
+      const dt = isNew && slot.t !== null ? hand.t - slot.t : 0;
+      const usable = dt > 0.005 && dt < 0.2;
+      if (isNew || slot.t === null || !Number.isFinite(hand.t)) {
+        hand.lm.forEach((p, i) => {
+          const target = slot.target[i];
+          if (usable) {
+            this._d.set(p[0] - target.x, p[1] - target.y, p[2] - target.z).divideScalar(dt);
+            slot.velocity[i].lerp(this._d, VELOCITY_BLEND);
+          } else {
+            slot.velocity[i].set(0, 0, 0);
+          }
+          target.fromArray(p);
+        });
+        slot.t = Number.isFinite(hand.t) ? hand.t : null;
+        slot.frameAt = performance.now();
+      }
     });
+  }
+
+  // slot.aim = latest landmarks pushed ahead along their velocity, only while the palm is moving fast.
+  aimAhead(slot, now) {
+    const speed = slot.velocity[9].length();
+    const [lo, hi] = LEAD_SPEED;
+    const gate = THREE.MathUtils.smoothstep(speed, lo, hi);
+    const fade = Math.max(0, 1 - (now - slot.frameAt) / 1000 / LEAD_FADE_S);
+    const lead = LEAD_S * gate * fade;
+    for (let i = 0; i < 21; i++) {
+      const offset = this._d.copy(slot.velocity[i]).multiplyScalar(lead);
+      if (offset.length() > MAX_LEAD_M) offset.setLength(MAX_LEAD_M);
+      slot.aim[i].copy(slot.target[i]).add(offset);
+    }
   }
 
   // Called every render frame. Smoothing happens in tracker space and the mapping uses this frame's camera,
@@ -88,12 +139,14 @@ export class Hands {
   // `camera` places the drawn hands (they follow the viewer's eye). `anchorCamera` places the thumb and index
   // tips used for grabbing: it must not move with the head, or turning your head would drag a held block.
   update(dt, camera, anchorCamera = camera) {
-    const k = 1 - Math.exp(-SMOOTHING_RATE * dt);
     let joint = 0;
     let bone = 0;
     for (const slot of this.slots) {
       if (!slot.side) continue;
-      slot.smoothed.forEach((p, i) => (slot.fresh ? p.copy(slot.target[i]) : p.lerp(slot.target[i], k)));
+      this.aimAhead(slot, performance.now());
+      const lag = slot.smoothed[9].distanceTo(slot.aim[9]);
+      const k = 1 - Math.exp(-Math.min(MAX_RATE, SMOOTHING_RATE + CATCHUP_GAIN * lag) * dt);
+      slot.smoothed.forEach((p, i) => (slot.fresh ? p.copy(slot.aim[i]) : p.lerp(slot.aim[i], k)));
       slot.fresh = false;
       slot.smoothed.forEach((p, i) => trackerToWorld(p.toArray(this._arr), camera, slot.shown[i]));
       [4, 8].forEach((joint, n) => trackerToWorld(slot.smoothed[joint].toArray(this._arr), anchorCamera, slot.anchor[n]));
