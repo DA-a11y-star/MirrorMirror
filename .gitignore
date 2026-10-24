@@ -1,5 +1,15 @@
+# Local Python environment and bytecode
 .venv/
 __pycache__/
-*.pyc
-.DS_Store
+*.py[cod]
+.Python
+
+# Keep already-committed models; ignore local downloads and temporary model files.
+face_landmarker.task
 face_landmarker.download
+
+# Editor and OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
