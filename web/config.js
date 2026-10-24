@@ -16,5 +16,5 @@ export const SCREEN_HEIGHT_M = 0.196;
 // Press H to recenter after settling into a different seat position.
 export const PARALLAX_STRENGTH = 1;
 
-// Drag to orbit the camera while developing; turn off once the avatar/head pose drives the camera.
-export const DEV_ORBIT = true;
+// true = old mouse-orbit camera with no avatar. false = the avatar and camera rig (movement and camera modes).
+export const DEV_ORBIT = false;
