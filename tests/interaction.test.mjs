@@ -239,3 +239,64 @@ test('calibration learns nothing from a wrong grab, a rushed grab or an unsuppor
   assert.equal(glance.interaction.grabs.size, 1);
   assert.equal(glance.learned.length, 0);
 });
+
+test('a block another user is holding cannot be targeted or grabbed until they let go', () => {
+  const s = setup();
+  s.interaction.setRemote(new Set(['b1']), new Set());
+  s.look();
+  assert.equal(s.interaction.target, null);
+  s.step([hand(false)]);
+  s.step([hand(true)]);
+  assert.equal(s.interaction.grabs.size, 0);
+  s.step([hand(false)]);
+  s.interaction.setRemote(new Set(), new Set());
+  s.look();
+  assert.equal(s.interaction.target, s.block);
+});
+
+test('a target another user takes is dropped at once, without the blink grace period', () => {
+  const s = setup();
+  s.look();
+  assert.equal(s.interaction.target, s.block);
+  s.interaction.setRemote(new Set(['b1']), new Set());
+  s.step([]); // still looking straight at it
+  assert.equal(s.interaction.target, null);
+});
+
+test('drop lets go of only that block, and the pinch stays consumed until released', () => {
+  const s = setup([-.8, .8]);
+  const first = point(center(s.interaction.screenRect(s.blocks[0])));
+  s.look(first);
+  s.step([hand(true)], first);
+  assert.equal(s.interaction.grabs.size, 1);
+  const start = s.blocks[0].position.clone();
+  s.interaction.drop('b2');
+  assert.equal(s.interaction.grabs.size, 1, 'a different block id changes nothing');
+  s.interaction.drop('b1');
+  assert.equal(s.interaction.grabs.size, 0);
+  s.step([hand(true, .1)], first);
+  assert.equal(s.interaction.grabs.size, 0, 'still pinching: no instant regrab');
+  assert.ok(s.blocks[0].position.distanceTo(start) < 1e-10, 'and the block does not follow the hand');
+  s.step([hand(false)], first);
+  s.step([hand(true)], first);
+  assert.equal(s.interaction.grabs.size, 1);
+});
+
+test('blocks other users look at or hold glow violet, below the local highlights', () => {
+  const s = setup();
+  const base = s.block.material.emissive.getHex();
+  s.interaction.setRemote(new Set(), new Set(['b1']));
+  s.step([], null);
+  assert.equal(s.block.material.emissive.getHex(), 0x8f7cf0);
+  const looking = s.block.material.emissiveIntensity;
+  s.interaction.setRemote(new Set(['b1']), new Set(['b1']));
+  s.step([], null);
+  assert.ok(s.block.material.emissiveIntensity > looking, 'holding glows brighter than looking');
+  s.interaction.setRemote(new Set(), new Set(['b1']));
+  s.look();
+  assert.equal(s.block.material.emissive.getHex(), 0xf4c95d, 'our own gaze target wins');
+  s.interaction.setRemote(new Set(), new Set());
+  s.step([], null);
+  s.step([], null, true, 400); // the local target outlives a blink by the grace period, then everything clears
+  assert.equal(s.block.material.emissive.getHex(), base);
+});

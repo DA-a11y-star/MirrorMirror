@@ -1,10 +1,13 @@
-// Per-laptop settings. Edit these on each machine before the demo.
+// Per-laptop settings. Edit these on each machine before the demo, or override them in the page URL, e.g.
+// localhost:8000/?user=B&relay=ws://localhost:8765&tracker=mock to run a second user on the same laptop.
+const params = new URLSearchParams(globalThis.location?.search);
 
-export const USER_ID = 'A'; // laptop A is the scene authority
-export const RELAY_URL = 'ws://192.168.1.10:8765'; // laptop A's LAN address
+export const USER_ID = params.get('user') ?? 'A'; // 'A' or 'B'
+export const HOST_ID = 'A'; // laptop A is the scene authority
+export const RELAY_URL = params.get('relay') ?? 'ws://192.168.1.10:8765'; // laptop A's LAN address
 export const TRACKER_URL = 'ws://localhost:8766';
 // 'websocket' = local Python tracker; 'mock' = animated hands for camera-free development.
-export const TRACKER_SOURCE = 'websocket';
+export const TRACKER_SOURCE = params.get('tracker') ?? 'websocket';
 // 'webcam' = calibrated iris features; 'external' = tracker-provided screen gaze; 'pointer' = explicit dev fallback.
 export const GAZE_SOURCE = 'webcam';
 

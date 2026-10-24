@@ -26,6 +26,7 @@ export class Interaction {
     this.frame = { hands: [] };
     this.grabs = new Map();
     this.wasPinched = new Set();
+    this.remote = { held: new Set(), looking: new Set() }; // block ids other users are holding / looking at
     this.resetTargeting();
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
@@ -41,6 +42,16 @@ export class Interaction {
 
   setFrame(frame) {
     this.frame = frame;
+  }
+
+  // Blocks another user is holding belong to them: they can't be targeted or grabbed until released.
+  setRemote(held, looking) {
+    this.remote = { held, looking };
+  }
+
+  // Another user took a block this laptop was holding. The pinch stays consumed until released and repeated.
+  drop(id) {
+    for (const [side, grab] of this.grabs) if (grab.mesh.userData.id === id) this.grabs.delete(side);
   }
 
   resetTargeting() {
@@ -88,6 +99,7 @@ export class Interaction {
     const hit = this.raycaster.intersectObjects(this.blocks.children, false)[0]?.object ?? null;
     const found = [];
     for (const mesh of this.blocks.children) {
+      if (this.remote.held.has(mesh.userData.id)) continue;
       const rect = this.screenRect(mesh);
       if (!rect) continue;
       const dx = Math.max(rect.x0 - gaze.x, 0, gaze.x - rect.x1) * this.gazeCamera.aspect;
@@ -113,6 +125,7 @@ export class Interaction {
       this.resetTargeting();
       return;
     }
+    if (this.target && this.remote.held.has(this.target.userData.id)) this.setTarget(null, now);
     const found = gaze && gaze.conf >= .5 ? this.candidates(gaze) : [];
     const best = found.filter(c => c.score <= SNAP_RADIUS).sort((a, b) => a.score - b.score)[0] ?? null;
     const current = found.find(c => c.mesh === this.target) ?? null;
@@ -186,6 +199,13 @@ export class Interaction {
     for (const [mesh, base] of this.baseMaterials) {
       mesh.material.emissive.copy(base.emissive);
       mesh.material.emissiveIntensity = base.intensity;
+    }
+    // Other users: violet while they look at a block, brighter while they hold it. Local highlights win.
+    for (const mesh of this.blocks.children) {
+      const id = mesh.userData.id;
+      if (!this.remote.held.has(id) && !this.remote.looking.has(id)) continue;
+      mesh.material.emissive.setHex(0x8f7cf0);
+      mesh.material.emissiveIntensity = this.remote.held.has(id) ? .45 : .22;
     }
     if (this.target) {
       this.target.material.emissive.setHex(0xf4c95d);

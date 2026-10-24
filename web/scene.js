@@ -24,13 +24,16 @@ export function createRenderer() {
   return renderer;
 }
 
-export function createScene() {
+// The two users stand at opposite ends of the blocks, facing each other.
+const SEATS = { A: [0, 1.6, 3.0], B: [0, 1.6, -3.0] };
+
+export function createScene(userId = 'A') {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(BACKGROUND);
   scene.fog = new THREE.Fog(BACKGROUND, 8, 28);
 
   const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.05, 100);
-  camera.position.set(0, 1.6, 3.0); // standing eye height, a few steps back from the blocks
+  camera.position.set(...(SEATS[userId] ?? SEATS.A)); // standing eye height, a few steps back from the blocks
   camera.lookAt(0, 0.4, 0);
 
   addLights(scene);
