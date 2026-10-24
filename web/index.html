@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Eye Tracking Hard and Soft</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #d9dde3; }
+    canvas { display: block; }
+    #hud {
+      position: fixed; top: 10px; left: 12px;
+      font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: #4a5261; background: rgba(255, 255, 255, 0.6);
+      padding: 4px 8px; border-radius: 6px; pointer-events: none;
+    }
+    #tools {
+      position: fixed; top: 42px; left: 12px; max-width: calc(100vw - 48px);
+      font: 13px/1.5 system-ui, sans-serif; color: #24334a;
+      background: rgba(255,255,255,.92); border: 1px solid #cdd4df; border-radius: 12px; padding: 12px 16px;
+    }
+    #tools label { font-weight: 600; }
+    button, select { font: inherit; border: 1px solid #aab8ca; border-radius: 7px; padding: 6px 10px; background: white; color: #24334a; }
+    button { cursor: pointer; }
+    button:disabled { opacity: .5; cursor: default; }
+    #gaze-status { margin-top: 7px; max-width: 560px; }
+    .hint { font-size: 12px; color: #617087; }
+    #gaze-reticle {
+      position: fixed; width: 18px; height: 18px; border: 2px solid #405c9b;
+      border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none;
+      background: rgba(255,255,255,.4); box-shadow: 0 0 0 3px rgba(255,255,255,.65);
+    }
+    #gaze-reticle.on-target { border-color: #9c6712; background: rgba(244,201,93,.6); }
+    #calibration { position: fixed; inset: 0; z-index: 5; background: #eef2f8; font: 16px/1.5 system-ui, sans-serif; color: #24334a; }
+    #calibration-copy { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); text-align: center; width: min(660px, 90%); }
+    #calibration-copy p { margin: 3px 0; }
+    #calibration-hint { position: absolute; left: 20px; bottom: 14px; width: calc(100% - 200px); font-size: 13px; }
+    #cancel-calibration { position: absolute; bottom: 18px; right: 18px; }
+    #calibration-dot { position: absolute; width: 28px; height: 28px; transform: translate(-50%, -50%); border-radius: 50%; background: #335eea; border: 6px solid white; box-shadow: 0 0 0 3px #98adf0; }
+    #calibration-dot::after { content: ''; position: absolute; inset: 10px; border-radius: 50%; background: white; }
+    [hidden] { display: none !important; }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/" } }
+  </script>
+</head>
+<body>
+  <div id="hud"></div>
+  <div id="tools">
+    <label for="gaze-source">Gaze</label>
+    <select id="gaze-source">
+      <option value="webcam">Webcam eyes</option>
+      <option value="external">External eye tracker</option>
+      <option value="pointer">Pointer (development)</option>
+    </select>
+    <button id="calibrate">Calibrate gaze</button>
+    <div id="gaze-status" role="status">Starting gaze input…</div>
+    <div class="hint">Look at a block → pinch to grab → move your hand → release to place.</div>
+  </div>
+  <div id="gaze-reticle" hidden></div>
+  <div id="calibration" hidden>
+    <div id="calibration-copy">
+      <strong>Webcam gaze calibration</strong>
+      <p id="calibration-instruction">Look at the dot</p>
+    </div>
+    <div id="calibration-hint">Keep your head comfortably still and follow the dot with your eyes. Each point captures automatically.</div>
+    <button id="cancel-calibration">Cancel (Esc)</button>
+    <div id="calibration-dot"></div>
+  </div>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

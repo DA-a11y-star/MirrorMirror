@@ -1,0 +1,6 @@
+mediapipe>=0.10.30
+opencv-python
+numpy
+pynput
+websockets>=15,<16
+certifi
