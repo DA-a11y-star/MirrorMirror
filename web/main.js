@@ -96,7 +96,7 @@ renderer.setAnimationLoop(() => {
     const fps = Math.round(frames / seconds);
     const trackerHz = Math.round(tracker.frames / seconds);
     const parallax = !offAxis.active ? 'parallax waiting for head' : `parallax ${(offAxis.eye.length() * 100).toFixed(0)} cm`;
-    hud.textContent = `user ${USER_ID}  ·  ${fps} fps  ·  tracker ${tracker.status} ${trackerHz} Hz${tracker.frame?.infer_ms != null ? ` (${tracker.frame.infer_ms} ms)` : ''}  ·  ${parallax}  ·  ${tracker.lastGesture}`;
+    hud.textContent = `user ${USER_ID}  ·  ${fps} fps  ·  tracker ${tracker.status} ${trackerHz} Hz${tracker.frame?.infer_ms != null ? ` (${tracker.frame.infer_ms} ms)` : ''}  ·  ${parallax}  ·  ${tracker.lastGesture}  ·  ${interaction.lastEnd}`;
     frames = 0;
     tracker.frames = 0;
     lastHud = now;

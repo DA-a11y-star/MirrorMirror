@@ -97,6 +97,40 @@ test('held tracking pose freezes motion, sustained loss releases', () => {
   assert.equal(s.interaction.grabs.size, 0);
 });
 
+test('a fast carry survives a momentary open-pinch reading, but a sustained one still releases', () => {
+  const s = setup();
+  s.look();
+  let t = 0;
+  const moving = (pinching, x) => ({ ...hand(pinching, x), t: (t += .05) });
+  s.step([moving(true, 0)]);
+  assert.equal(s.interaction.grabs.size, 1);
+  for (let x = .1; x < .5; x += .1) s.step([moving(true, x)]); // ~2 m/s
+  s.step([moving(false, .5)]); // blur makes the pinch read open for one frame
+  assert.equal(s.interaction.grabs.size, 1, 'a one-frame flicker during a fast carry keeps the grab');
+  s.step([moving(true, .6)]);
+  assert.equal(s.interaction.grabs.size, 1);
+  assert.equal(s.interaction.grabs.get('right').openSince, null, 'a returning pinch cancels the pending release');
+  for (let x = .7; x < 1.2; x += .1) s.step([moving(false, x)]); // open for 400 ms: still inside the grace
+  assert.equal(s.interaction.grabs.size, 1);
+  s.step([moving(false, 1.2)]);
+  s.step([moving(false, 1.3)]);
+  assert.equal(s.interaction.grabs.size, 0, 'an open pinch that persists is a real release');
+  assert.match(s.interaction.lastEnd, /pinch opened/);
+});
+
+test('a fast carry that loses the hand entirely still releases right away', () => {
+  const s = setup();
+  s.look();
+  let t = 0;
+  const moving = x => ({ ...hand(true, x), t: (t += .05) });
+  s.step([moving(0)]);
+  for (let x = .1; x < .5; x += .1) s.step([moving(x)]);
+  assert.equal(s.interaction.grabs.size, 1);
+  s.step([], null);
+  assert.equal(s.interaction.grabs.size, 0);
+  assert.match(s.interaction.lastEnd, /hand lost/);
+});
+
 test('a pinch without a target cannot grab later until released', () => {
   const s = setup();
   s.step([hand(true)], null);
