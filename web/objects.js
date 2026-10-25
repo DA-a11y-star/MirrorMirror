@@ -56,12 +56,13 @@ export class Objects {
     this.history = [];
   }
 
-  add(spec, { place = true, remember = true, notify = true } = {}) {
+  // `near` [x, z]: search for free space around this point instead of the middle of the workspace (duplicates).
+  add(spec, { place = true, near = null, remember = true, notify = true } = {}) {
     const existing = this.container.children.find(root => root.userData.id === spec.id);
     if (existing) return existing;
     if (this.container.children.length >= MAX_OBJECTS) throw new Error('Workspace is full. Undo an object to make room');
     const root = createAssembly(spec);
-    if (place) this.place(root);
+    if (place) this.place(root, near);
     this.container.add(root);
     this.interaction.register(root);
     if (remember) this.history.push(root);
@@ -93,14 +94,16 @@ export class Objects {
     return new THREE.Vector3(0, 0, -.4);
   }
 
-  place(root) {
+  place(root, near = null) {
+    // Search around `near` [x, z] when given (a duplicate lands beside its original), else the usual spot.
+    const [cx, cz] = near ?? [0, -.4];
     const candidates = this._candidates();
     this.container.updateWorldMatrix(true, true);
     const occupied = this.container.children.map(child => new THREE.Box3().setFromObject(child).expandByScalar(.06));
     const bounds = new THREE.Box3();
     let placed = false;
     for (const [x, z] of candidates) {
-      root.position.set(x, 0, z - .4);
+      root.position.set(cx + x, 0, cz + z);
       root.updateWorldMatrix(true, true);
       bounds.setFromObject(root);
       root.position.y -= bounds.min.y;

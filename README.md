@@ -65,6 +65,8 @@ web/
   object-protocol.js   Validated render-only assembly format for relay operations and scene snapshots
   voice.js             Browser recording, local WAV conversion and voice WebSocket client
   voice-ui.js          Push-to-talk, editable descriptions and generation progress
+  library.js           Object library: built-ins, saved voice objects, name matching, export/import (per laptop)
+  library-ui.js        Library panel (L), duplicate (F) and delete (Delete) the looked-at object, clear scene
   vendor/              three.js 0.186.1 and OrbitControls, vendored (never load from a CDN)
 voice/
   main.py              Independent local voice WebSocket service (localhost:8767)

@@ -49,6 +49,30 @@
     #voice-record[aria-pressed="true"] { background: #ffe0dc; border-color: #e76f51; }
     button:disabled { opacity: .5; cursor: default; }
     #voice-status { margin-top: 8px; }
+    /* Object library (web/library-ui.js): a toggle button and a panel at the bottom right. */
+    #library-toggle { position: fixed; right: 18px; bottom: 18px; z-index: 3; padding: 9px 16px; font: 600 13px system-ui, sans-serif; box-shadow: 0 5px 24px #24334a22; }
+    #library {
+      position: fixed; right: 18px; bottom: 62px; z-index: 3; width: min(420px, calc(100vw - 36px)); max-height: calc(100vh - 140px);
+      display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; box-sizing: border-box;
+      background: rgba(255,255,255,.96); border: 1px solid #cdd4df; border-radius: 12px; box-shadow: 0 5px 24px #24334a22;
+      color: #24334a; font: 13px/1.45 system-ui, sans-serif;
+    }
+    .library-head { display: flex; align-items: center; justify-content: space-between; font-size: 15px; }
+    .library-close { padding: 0 9px; font-size: 18px; line-height: 26px; }
+    #library input[type="search"] { font: inherit; padding: 6px 9px; border: 1px solid #aab8ca; border-radius: 7px; }
+    .library-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; overflow-y: auto; min-height: 120px; padding: 2px; }
+    .library-card { display: flex; flex-direction: column; gap: 3px; }
+    .library-add { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 4px 6px; border-radius: 9px; background: #f3f5f8; }
+    .library-add:hover { border-color: #4c6ef5; background: #eef2ff; }
+    .library-add img { width: 100%; height: auto; aspect-ratio: 4 / 3; }
+    .library-name { font-weight: 600; font-size: 12px; text-align: center; overflow-wrap: anywhere; }
+    .library-badge { position: absolute; top: 4px; right: 4px; padding: 0 6px; border-radius: 99px; background: #4c6ef5; color: #fff; font-size: 10px; }
+    .library-tools { display: flex; gap: 3px; }
+    .library-tools button { flex: 1; padding: 2px 4px; font-size: 11px; }
+    .library-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+    .library-target { flex: 1 1 100%; color: #617087; font-size: 12px; }
+    .library-status { min-height: 1.4em; color: #617087; font-size: 12px; }
+    .library-empty { grid-column: 1 / -1; color: #617087; text-align: center; }
     [hidden] { display: none !important; }
   </style>
   <link rel="stylesheet" href="./landing.css">
@@ -101,7 +125,7 @@
       <div id="gaze-result" class="hint" role="status"></div>
       <div class="hint">MOVE: right palm = move (forward/back, left/right, up/down). Left palm = look (up/down, left/right). One fist recenters that stick. Double-fist then both open switches to EDIT. In EDIT, hold one fist to talk: “mirror mirror, make a …”.</div>
       <div class="hint">No camera? Open with <code>?tracker=mouse</code>: the cursor is your gaze and hand, hold the left button to pinch, right-click to mouse-look.</div>
-      <div class="hint">Keys: ↑↓ forward · ←→ turn · A/D strafe · Space/Shift up/down · M mode · V view · C free cam · P depth · R respawn · ` dev. Click the scene to mouse-look (Esc releases).</div>
+      <div class="hint">Keys: ↑↓ forward · ←→ turn · A/D strafe · Space/Shift up/down · M mode · V view · C free cam · P depth · R respawn · ` dev · L library · F copy looked-at · Del delete looked-at. Click the scene to mouse-look (Esc releases).</div>
     </div>
     <div id="gaze-reticle" hidden></div>
     <section id="voice-tools" aria-label="Voice object creation">

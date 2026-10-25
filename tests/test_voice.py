@@ -147,6 +147,16 @@ class PipelineTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual((await recv())["type"], "error")
                 await ws.send('{"type":"generate","text":"undo"}')
                 self.assertEqual((await recv())["type"], "undo")
+                # Transcribe-only mode (the browser checks its object library first): audio stops at the transcript.
+                await ws.send('{"type":"options","designAudio":false}')
+                await ws.send(wav())
+                self.assertEqual((await recv())["stage"], "transcribing")
+                self.assertEqual((await recv())["text"], "A blue chair")
+                with self.assertRaises(TimeoutError, msg="nothing is designed from the audio itself"):
+                    await asyncio.wait_for(ws.recv(), .3)
+                await ws.send('{"type":"generate","text":"chair"}')
+                self.assertEqual((await recv())["stage"], "designing")
+                self.assertEqual((await recv())["type"], "object")
 
     async def test_meta_multipart_auth_and_structured_output_contract(self):
         calls = []

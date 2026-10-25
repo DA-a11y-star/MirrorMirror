@@ -38,12 +38,13 @@ web/       index.html, main.js, config.js, scene.js
            avatar.js, gait.js, remote-avatar.js
            net.js, sync.js, object-protocol.js, objects.js
            voice.js, voice-ui.js, dust.js
+           library.js, library-ui.js
            vendor/ (three.js 0.186, OrbitControls, fonts/ for the landing page)
 tests/     Node (*.test.mjs) and Python (test_*.py); tests/e2e/run.py is the two-browser run through the real relay
 README.md, MOVEMENT_CAMERA.md (the movement/camera task spec), GESTURE_UX.md (the gesture task spec)
 hand_landmarker.task, face_landmarker.task (MediaPipe models, committed so venue Wi-Fi isn't needed)
 ```
-Planned new files are listed under Planned work (`web/sets/`, `web/library.js`, `web/gait.js`, ...).
+Planned new files are listed under Planned work (`web/sets/`, `web/gait.js`, ...). The object library is `web/library.js` + `web/library-ui.js`.
 
 ## Running
 ```
@@ -162,7 +163,13 @@ Verification legend: **unit** = Node/Python tests, **sim** = scripted simulation
 
 **Scene sync scaling.** See Protocol. Verified by unit tests (60-assembly scene reconstructed by a joiner, poses-only steady state, bounded acks and tombstones, spec owed until delivered) and the e2e (a reloaded guest rebuilds a voice object); mutation-checked. The relay limit is tested for a 3 MiB pass-through and an over-limit close.
 
-**Tests.** 134 Node tests and 47 Python tests pass before the landing page (which adds 12 Node tests), and the two-browser e2e (`tests/e2e/run.py`) passes locally. Multiplayer logic, grip grace, gaze validation, scene-sync scaling and the mouse fallback were mutation-checked.
+**Object library (planned work C).** `web/library.js` (pure, tested) and `web/library-ui.js` (panel). Per laptop, never synced: adding an entry builds an ordinary assembly with a **new instance id** (`lib-<entry>-<n>`) through `Objects.add`, so `op:add` carries it to the other laptop, which needs no library and no API.
+- **Entries** `{id, name, spec, source: builtin|voice, createdAt}`; `spec` is a template (valid assembly, grounded at y = 0, centered on x/z, identity pose). **Built-ins:** cube, sphere, cylinder, cone, plank, wall, chair, table, tree, house (the house roof is one box turned 45°, so no gable gaps). **Voice objects are saved automatically**, deduplicated by a hash of their parts (name, id and pose ignored), persisted in `localStorage` (`mirrormirror.library.v1`, at most 80 saved objects and ~1.5 MB, oldest dropped first; broken or blocked storage degrades to memory). Rename and remove apply to saved objects only. JSON **export/import** (`mirrormirror.library` format, a bare list, or a single assembly spec; invalid entries skipped). Thumbnails are rendered on demand in the panel (offscreen renderer, a few per frame, cached), not stored.
+- **Voice shortcut.** A request that names an entry outright (filler words like "a", "make", "another", "please" ignored; simple plurals) is built from the library with no Muse call; any extra detail ("a blue chair with wooden legs") goes to Muse. Saved objects win over built-ins of the same name. The spoken wake phrase ("mirror mirror, make …") is ignored, as `clean_command` does on the server; a library build from speech ends the dust-cloud animation with its burst at the new object. Typed names work with the voice service down (Build stays enabled for a match). Spoken requests: the browser sends `{"type":"options","designAudio":false}` on connect, so `voice/main.py` stops at the transcript; the browser checks the library, then sends the text as a normal `generate` if nothing matched. Other clients keep the old transcribe-and-design behaviour.
+- **Edits on what you look at** (EDIT mode only, because targeting only runs in EDIT): **F** duplicates (placed beside the original via `Objects.add(..., { near })`; a starter block becomes an equivalent one-part box), **Delete/Backspace** deletes a created object (starter blocks belong to the room and are refused with a message, since the protocol can't delete them), **Clear scene** in the panel (second click within 3 s confirms) removes every created object. **L** opens the panel (also a Library button bottom-right).
+- Verified by **unit** tests (`tests/library.test.mjs` 11, plus `tests/voice.test.mjs` and `tests/test_voice.py` for the transcribe-only flow; mutation-checked: shape dedupe, fresh instance ids, filler words, exact-name matching, grounding/centering, the saved cap, saved-over-built-in priority, library-before-Muse, auto-save, offline Build, near placement, transcript ending the request, the client options message, the server stopping at the transcript) and a scripted two-browser run through the real relay (21 checks: panel and thumbnails, add, F, Delete and a typed library name all appear on B; starter-block delete refused; a saved object survives a reload). Not tried with real hands or a real Muse call.
+
+**Tests.** 134 Node tests and 47 Python tests pass before the landing page (which adds 12 Node tests; the object library brings Node to 177 and Python to 49), and the two-browser e2e (`tests/e2e/run.py`) passes locally. Multiplayer logic, grip grace, gaze validation, scene-sync scaling and the mouse fallback were mutation-checked.
 
 ## Performance notes (measured on an M4 MacBook, headless Chrome on the real GPU)
 - A whole frame is cheap: JS 0.3 ms with 55 objects (gaze targeting, hands, sync), and rendering about 4 ms at pixel ratio 2 with shadows and MSAA. The Python glue (pose solve, filters, JSON) is about 0.15 ms per frame; the real tracker cost is MediaPipe inference (about 10 ms per frame), which is not our code.
@@ -198,7 +205,7 @@ Gaze validation UI, grip grace, scene-sync scaling, the in-repo e2e, and the mou
 - **Depends on** the library below (what replaces erased objects). Scene sync scaling is done: props send transforms only, and recipes ride along when new or when a peer joins.
 - **Done when:** registry validity tests (every spec passes `validAssembly`, budgets respected), deterministic build (same seed, same transforms), a switch erases everything on both laptops, stale-epoch messages are dropped, a late joiner gets the set, and the e2e covers a switch.
 
-### C. Object library
+### C. Object library — **implemented** (see Implemented → Object library); the spec is kept below.
 **What.** Every object made by voice is saved to a library, so people can add more of the same without speaking again. The library starts with basic built-ins.
 - **Entries.** `{id, name, spec (a grounded, centered template), thumbnail, source: builtin|voice}`. Built-ins use the four supported primitives: cube, sphere, cylinder, cone, plank, wall, chair, table, tree, house.
 - **Saving.** Each generated object is added automatically (deduplicated by a hash of its spec). Persisted per laptop in `localStorage` with a size cap, with rename, delete and JSON export/import.

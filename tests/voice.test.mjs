@@ -15,8 +15,12 @@ function setup(context) {
   const voice = new Voice('ws://localhost:8767', event => events.push(event));
   context.after(() => voice.close());
   voice.socket.receive({ type: 'ready', configured: true });
+  // On connect the client asks for transcribe-only audio, so the object library is checked before Muse designs.
+  assert.deepEqual(JSON.parse(voice.socket.sent[0]), { type: 'options', designAudio: false });
+  voice.socket.sent.length = 0;
   return { voice, events };
 }
+const generates = voice => voice.socket.sent.filter(m => typeof m === 'string').map(m => JSON.parse(m)).filter(m => m.type === 'generate');
 
 test('one generation at a time and a failed request leaves the client ready to retry', context => {
   const { voice, events } = setup(context);
@@ -60,10 +64,21 @@ test('missing API configuration prevents requests while undo can still be sent',
   const { voice, events } = setup(context);
   voice.socket.receive({ type: 'ready', configured: false });
   voice.generate('A chair');
-  assert.equal(voice.socket.sent.length, 0);
+  assert.equal(generates(voice).length, 0);
   assert.match(events.at(-1).message, /MODEL_API_KEY/);
   voice.generate('undo');
-  assert.equal(JSON.parse(voice.socket.sent[0]).text, 'undo');
+  assert.equal(generates(voice)[0].text, 'undo');
+});
+
+test('a transcript ends the audio request, so the UI can send the text (or use the library) next', context => {
+  const { voice, events } = setup(context);
+  voice.send(new ArrayBuffer(8));
+  assert.equal(voice.busy, true);
+  voice.socket.receive({ type: 'transcript', text: 'A chair' });
+  assert.equal(voice.busy, false);
+  assert.equal(events.at(-1).text, 'A chair');
+  voice.generate('A chair');
+  assert.equal(generates(voice).length, 1, 'not refused as "already generating"');
 });
 
 test('cancel drops a pending request: the late answer is ignored and the next request works', async context => {
@@ -79,8 +94,10 @@ test('cancel drops a pending request: the late answer is ignored and the next re
   await new Promise(resolve => setTimeout(resolve, 200)); // reconnects on its own
   assert.notEqual(voice.socket, old, 'a fresh connection');
   voice.socket.receive({ type: 'ready', configured: true });
+  // The server forgets per-connection options, so the fresh connection asks for transcribe-only audio again.
+  assert.deepEqual(JSON.parse(voice.socket.sent[0]), { type: 'options', designAudio: false });
   voice.generate('A tree');
-  assert.equal(voice.socket.sent.length, 1);
+  assert.equal(generates(voice).length, 1);
   voice.socket.receive({ type: 'object', spec: { name: 'tree' } });
   assert.equal(events.at(-1).type, 'object');
   assert.equal(events.at(-1).spec.name, 'tree');

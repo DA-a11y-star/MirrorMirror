@@ -59,8 +59,11 @@ export class Voice {
         if (msg.type === 'ready') {
           this.connected = true;
           this.configured = msg.configured;
+          // Audio stops at the transcript, so the object library is checked before Muse designs anything; the UI
+          // then sends the text as a normal generate request if no library entry matches.
+          socket.send(JSON.stringify({ type: 'options', designAudio: false }));
         }
-        if (['object', 'error', 'undo'].includes(msg.type)) {
+        if (['object', 'error', 'undo', 'transcript'].includes(msg.type)) {
           clearTimeout(this.requestTimer);
           this.busy = false;
         }

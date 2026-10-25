@@ -21,6 +21,8 @@ import { Dev } from './dev.js';
 import { Objects } from './objects.js';
 import { VoiceUI } from './voice-ui.js';
 import { DustCloud } from './dust.js';
+import { Library } from './library.js';
+import { LibraryUI } from './library-ui.js';
 import { Gestures } from './gestures.js';
 import { GestureUI } from './gesture-ui.js';
 
@@ -40,7 +42,11 @@ const objects = new Objects(blocks, interaction);
 const sync = new SceneSync(blocks, { userId: USER_ID, hostId: HOST_ID, objects });
 const peers = new Map(); // user id -> RemoteAvatar
 const heldIds = () => new Set([...interaction.grabs.values()].map(grab => grab.mesh.userData.id));
-const voiceUI = new VoiceUI(VOICE_URL, objects);
+// The object library is per laptop (localStorage); what it adds is shared like any other object.
+const library = new Library({ storage: (() => { try { return localStorage; } catch { return null; } })() });
+let libraryUI = null;
+const voiceUI = new VoiceUI(VOICE_URL, objects, library, { onLibraryChange: () => libraryUI?.render() });
+libraryUI = new LibraryUI(library, objects, interaction, { onChange: () => voiceUI.refresh() });
 // Building animation: a dust cloud where the next object will land while the voice request runs, bursting when it arrives.
 const dust = new DustCloud(scene);
 const DUST_BASE = new THREE.Vector3();
@@ -71,7 +77,7 @@ function steerDust(dt) {
 }
 // The landing page's choice. Nothing consumes it yet; sets (CLAUDE.md, planned work B) will build from it.
 const presetId = currentPreset();
-window.app = { renderer, scene, camera, view, hands, blocks, interaction, gaze, gazeUI, offAxis, sync, peers, objects, voiceUI, presetId, dust }; // dev console
+window.app = { renderer, scene, camera, view, hands, blocks, interaction, gaze, gazeUI, offAxis, sync, peers, objects, voiceUI, library, libraryUI, presetId, dust }; // dev console
 
 // Avatar, camera rig and input. Keys and mouse are read only in input.js; everything below consumes intents.
 const input = new Input(renderer.domElement, { mouseFallback: TRACKER_SOURCE === 'mouse' });
@@ -208,6 +214,9 @@ renderer.setAnimationLoop(() => {
   gestures.apply(intents);
   if (intents.toggles.voice) voiceUI.wake();
   if (intents.toggles.dev) dev.toggle();
+  if (intents.toggles.library) libraryUI.toggle();
+  if (intents.toggles.duplicate) libraryUI.duplicateTarget();
+  if (intents.toggles.remove) libraryUI.deleteTarget();
   if (intents.toggles.recenter) offAxis.recenter();
   if (intents.toggles.depthFx) {
     depthFx = !depthFx;
@@ -233,6 +242,7 @@ renderer.setAnimationLoop(() => {
   interaction.setRemote(new Set(sync.holders.keys()), new Set([...peers.values()].map(peer => peer.looking).filter(Boolean)));
   interaction.update(gaze.get(now), !gaze.calibrating && gestures.mode === 'EDIT', now);
   gazeUI.update(now, interaction.target?.userData.id, [...interaction.grabs.values()].map(g => g.mesh.userData.id).join(', '));
+  libraryUI.update(interaction.target);
   gestureUI.update();
   steerDust(dt);
   dust.update(dt);

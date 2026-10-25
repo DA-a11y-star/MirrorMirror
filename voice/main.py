@@ -50,6 +50,9 @@ async def handle(websocket, muse):
         await websocket.send(json.dumps({"type": kind, **fields}, allow_nan=False))
 
     await send("ready", configured=bool(muse.key))
+    # {"type": "options", "designAudio": false} makes audio requests stop at the transcript, so the browser can
+    # check its object library before asking Muse to design anything (it then sends a text generate request).
+    design_audio = True
     async for message in websocket:
         started = time.monotonic()
         try:
@@ -59,8 +62,13 @@ async def handle(websocket, muse):
                     await send("status", stage="transcribing")
                     text = await muse.transcribe(message)
                     await send("transcript", text=text)
+                    if not design_audio:
+                        continue
                 else:
                     request = json.loads(message)
+                    if isinstance(request, dict) and request.get("type") == "options":
+                        design_audio = bool(request.get("designAudio", True))
+                        continue
                     if not isinstance(request, dict) or request.get("type") != "generate":
                         raise ValueError("Expected a generate request")
                     text = request.get("text")

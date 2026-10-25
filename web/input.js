@@ -6,7 +6,7 @@
 //   look:    { dYaw, dPitch } radians this frame; dYaw > 0 = left, dPitch > 0 = up
 //   zoom:    scroll notches this frame; > 0 = scroll down (zoom out / slower)
 //   toggles: edge-triggered, true for exactly one frame
-//            { mode, voice, view, freeCam, dev, depthFx, reset, recenter }
+//            { mode, voice, view, freeCam, dev, depthFx, reset, recenter, library, duplicate, remove }
 
 export const MOUSE_SENSITIVITY = 0.0022; // radians per pixel of pointer-lock movement
 
@@ -19,6 +19,10 @@ const KEY_TOGGLES = {
   KeyP: 'depthFx',
   KeyR: 'reset',
   KeyH: 'recenter',
+  KeyL: 'library',     // open/close the object library
+  KeyF: 'duplicate',   // copy the object you are looking at
+  Delete: 'remove',    // delete the object you are looking at
+  Backspace: 'remove',
 };
 const HELD_KEYS = new Set([
   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyA', 'KeyD', 'Space', 'ShiftLeft', 'ShiftRight',
@@ -32,7 +36,8 @@ export function emptyIntents() {
     pitch: 0,                     // -1..1 look-pitch rate (left-hand stick)
     look: { dYaw: 0, dPitch: 0 },
     zoom: 0,
-    toggles: { mode: false, voice: false, view: false, freeCam: false, dev: false, depthFx: false, reset: false, recenter: false },
+    toggles: { mode: false, voice: false, view: false, freeCam: false, dev: false, depthFx: false, reset: false, recenter: false,
+      library: false, duplicate: false, remove: false },
   };
 }
 
@@ -58,7 +63,7 @@ export class Input {
     target.addEventListener('keyup', e => this._keyUp(e));
     target.addEventListener('blur', () => this.clear());
     target.addEventListener('wheel', e => {
-      if (e.target instanceof Element && e.target.closest('#tools, #calibration, #voice-tools')) return;
+      if (e.target instanceof Element && e.target.closest('#tools, #calibration, #voice-tools, #library')) return;
       e.preventDefault();
       const unit = e.deltaMode === 1 ? 1 : 100; // lines vs pixels
       this.wheel += e.deltaY / unit;

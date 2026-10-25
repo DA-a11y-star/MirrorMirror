@@ -1,8 +1,13 @@
 import { Voice } from './voice.js';
 
+// Voice and typed object requests. A request that names a library entry outright ("a chair", "another tree") is
+// built from the library with no Muse call, which also works when the voice service or internet is down; anything
+// else goes to Muse, and every object Muse makes is saved to the library.
 export class VoiceUI {
-  constructor(url, objects) {
+  constructor(url, objects, library = null, { onLibraryChange } = {}) {
     this.objects = objects;
+    this.library = library;
+    this.onLibraryChange = onLibraryChange;
     this.status = document.getElementById('voice-status');
     this.input = document.getElementById('object-description');
     this.record = document.getElementById('voice-record');
@@ -11,8 +16,9 @@ export class VoiceUI {
     this.voice = new Voice(url, msg => this.event(msg));
     document.getElementById('voice-form').addEventListener('submit', e => {
       e.preventDefault();
-      this.voice.generate(this.input.value);
+      this.request(this.input.value);
     });
+    this.input.addEventListener('input', () => this.refresh());
     this.undo.addEventListener('click', () => this.undoObject());
     this.record.addEventListener('pointerdown', e => {
       if (e.button !== 0) return;
@@ -80,6 +86,21 @@ export class VoiceUI {
     } catch { /* audio may be blocked until the first click */ }
   }
 
+  request(text) {
+    const entry = this.library?.match(text);
+    if (entry) this.addFromLibrary(entry);
+    else this.voice.generate(text);
+  }
+
+  addFromLibrary(entry) {
+    try {
+      const root = this.objects.add(this.library.instantiate(entry.id));
+      this.onBuild?.('done', root); // a spoken request started the dust cloud; no Muse object will arrive to end it
+      this.status.textContent = `${entry.name} from the library (no Muse call). Look and pinch to move it.`;
+    } catch (error) { this.status.textContent = error.message; this.onBuild?.('stop'); }
+    this.refresh();
+  }
+
   undoObject() {
     this.status.textContent = this.objects.undo() ? 'Last creation removed.' : 'No generated objects to undo.';
     this.refresh();
@@ -101,7 +122,10 @@ export class VoiceUI {
       // The dust cloud swirls from the moment audio is sent until the object (or an error) comes back.
       if (['encoding', 'sending', 'transcribing', 'designing'].includes(msg.stage)) this.onBuild?.('start');
     }
-    if (msg.type === 'transcript') this.input.value = msg.text;
+    if (msg.type === 'transcript') {
+      this.input.value = msg.text;
+      this.request(msg.text); // the server stops at the transcript: library first, then Muse
+    }
     if (msg.type === 'error') { this.status.textContent = msg.message; this.onBuild?.('stop'); }
     if (msg.type === 'cancelled') this.status.textContent = 'Build cancelled.';
     if (msg.type === 'nospeech') this.status.textContent = 'Didn\'t hear anything. Make a fist again and say “mirror mirror, make a …”.';
@@ -110,7 +134,9 @@ export class VoiceUI {
       try {
         const root = this.objects.add(msg.spec);
         this.onBuild?.('done', root);
-        this.status.textContent = `${root.name} · ${root.children.length} parts · ${msg.seconds}s. Look and pinch to move it.`;
+        const saved = this.library?.save(msg.spec);
+        if (saved?.added) this.onLibraryChange?.();
+        this.status.textContent = `${root.name} · ${root.children.length} parts · ${msg.seconds}s${saved?.added ? ' · saved to the library' : ''}. Look and pinch to move it.`;
       } catch (error) { this.status.textContent = error.message; this.onBuild?.('stop'); }
     }
     this.refresh();
@@ -119,7 +145,9 @@ export class VoiceUI {
   refresh() {
     const voice = this.voice;
     if (!voice) return;
-    this.build.disabled = !voice.connected || !voice.configured || voice.busy || voice.recording || voice.starting;
+    // A name the library knows needs no voice service; anything else needs a connected, configured one.
+    const fromLibrary = !!this.library?.match(this.input.value);
+    this.build.disabled = voice.busy || voice.recording || voice.starting || (!fromLibrary && (!voice.connected || !voice.configured));
     // Keep the active record button enabled so it keeps pointer capture and receives release.
     this.record.disabled = !voice.connected || !voice.configured || (voice.busy && !voice.recording);
     this.record.textContent = voice.recording ? '● Release to build' : 'Hold to speak';

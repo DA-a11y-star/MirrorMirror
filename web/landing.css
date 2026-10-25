@@ -23,10 +23,10 @@
   --shadow: 0 14px 36px rgba(0, 0, 0, .45);
   --vignette: rgba(6, 10, 22, .5);
   --scene-dim: rgba(6, 10, 22, .14);
-  color-scheme: dark;
 }
 
 #landing {
+  color-scheme: dark; /* only the landing page: on :root it turned the workspace's light inputs dark */
   position: fixed; inset: 0; z-index: 20; overflow: auto;
   display: flex; flex-direction: column;
   color: var(--ink); background: #1b2030;
