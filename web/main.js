@@ -79,14 +79,18 @@ window.app = { renderer, scene, camera, view, hands, blocks, interaction, gaze, 
 
 // The set's look and model. The model is scenery: it is added to the scene, not to `blocks`, so it can't be targeted.
 let world = null; // the landing-page preset's world, once loaded
-const set = SETS[SET_ID];
+// A preset whose id is also a model set in sets.js (cyberpunk) loads that model; every other preset is built from
+// primitives by world.js. An explicit ?set= wins over both.
+const explicitSet = new URLSearchParams(location.search).get('set');
+const modelPreset = !explicitSet && SETS[presetId]?.model ? presetId : null;
+const set = SETS[explicitSet ?? modelPreset ?? SET_ID];
 if (!set) throw new Error(`Unknown set "${SET_ID}"; known: ${Object.keys(SETS).join(', ')}`);
 applyEnvironment(scene, look, set.environment);
 if (set.workspace) blocks.position.set(set.workspace[0], 0, set.workspace[1]);
 window.app.set = set;
 window.app.look = look; // dev console: tweak lights and floor live
 // The landing page's preset becomes the world (unless ?set= asks for a model set explicitly).
-if (presetId && !new URLSearchParams(location.search).has('set')) {
+if (presetId && !explicitSet && !modelPreset) {
   window.app.worldReady = loadWorld(presetId, { scene, look, camera, blocks }).then(loaded => {
     world = loaded;
     window.app.world = loaded;

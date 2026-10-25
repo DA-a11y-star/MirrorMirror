@@ -37,3 +37,16 @@ test('every preset in the registry has a folder the workspace can load', async (
     assert.ok(presetUrl(id).includes(`/presets/${id}/`));
   }
 });
+
+test('the cyberpunk preset is backed by the model set in sets.js (its model file and credit exist)', async () => {
+  const setsSource = await readFile(new URL('../web/sets.js', import.meta.url), 'utf8');
+  assert.match(setsSource, /\bcyberpunk: \{/);
+  const model = /model: '([^']+)'/.exec(setsSource)[1];
+  const glb = await readFile(new URL(`../web/${model}`, import.meta.url));
+  assert.equal(glb.subarray(0, 4).toString(), 'glTF', 'a binary glTF file');
+  const credits = await readFile(new URL('../web/assets/CREDITS.md', import.meta.url), 'utf8');
+  assert.ok(credits.includes('cyberpunk/'));
+  const preset = JSON.parse(await readFile(new URL('../web/presets/cyberpunk/preset.json', import.meta.url), 'utf8'));
+  assert.equal(preset.id, 'cyberpunk');
+  await readFile(new URL(`../web/presets/cyberpunk/${preset.thumbnail}`, import.meta.url)); // the card image exists
+});
