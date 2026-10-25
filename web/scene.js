@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 const BACKGROUND = 0xd9dde3;
+const FLOOR_SIZE = 60; // meters; a set can enlarge it (environment.floorSize)
 const BLOCK_COLORS = [0xe76f51, 0xf4a261, 0xe9c46a, 0x2a9d8f, 0x4c6ef5];
 
 // Starter blocks so there is something to look at and, later, to grab. Sizes and positions in meters.
@@ -50,7 +51,7 @@ export function createScene(userId = 'A') {
 
 // Repaints the room for a set: sky, fog, lights and floor. Each field is optional; `environment` comes from sets.js.
 export function applyEnvironment(scene, look, environment = {}) {
-  const { background, fog, hemisphere, sun, fill, floor, grid } = environment;
+  const { background, fog, hemisphere, sun, fill, floor, grid, floorSize, floorY } = environment;
   if (background != null) scene.background.setHex(background);
   if (fog) {
     scene.fog.color.setHex(fog[0]);
@@ -72,6 +73,8 @@ export function applyEnvironment(scene, look, environment = {}) {
   }
   if (floor != null) look.floor.material.color.setHex(floor);
   if (grid != null) look.grid.visible = grid;
+  if (floorY != null) look.floor.position.y = floorY;
+  if (floorSize) look.floor.scale.setScalar(floorSize / FLOOR_SIZE);
 }
 
 function addLights(scene) {
@@ -96,7 +99,7 @@ function addLights(scene) {
 
 function addFloor(scene) {
   const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(60, 60),
+    new THREE.PlaneGeometry(FLOOR_SIZE, FLOOR_SIZE),
     new THREE.MeshStandardMaterial({ color: 0xeceef1, roughness: 0.95 }),
   );
   floor.rotation.x = -Math.PI / 2;

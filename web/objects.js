@@ -27,6 +27,7 @@ export function createAssembly(spec) {
     for (const part of spec.parts) {
       const mesh = new THREE.Mesh(geometry(part.shape), new THREE.MeshStandardMaterial({
         color: part.color, roughness: .65, metalness: 0,
+        ...(part.emissive ? { emissive: part.emissive, emissiveIntensity: 1.8 } : {}), // an optional glow (street lamps)
       }));
       mesh.name = part.id;
       mesh.scale.fromArray(part.size);

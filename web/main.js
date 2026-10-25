@@ -11,15 +11,17 @@ import { startMockTracker } from './mock.js';
 import { startMouseTracker } from './mouse-tracker.js';
 import { applyEnvironment, createRenderer, createScene, SPAWNS } from './scene.js';
 import { SETS, loadSetModel } from './sets.js';
-import { loadWorld } from './world.js';
+import { loadWorld, worldSeed } from './world.js';
 import { sceneryStats } from './scenery.js';
+import { loadSetProps } from './props.js';
+import { random } from './set-layout.js';
 import { startTracker } from './tracker.js';
 import { GazeInput } from './gaze.js';
 import { GazeUI } from './gaze-ui.js';
 import { Interaction } from './interaction.js';
 import { round, SceneSync } from './sync.js';
 import { emptyIntents, Input } from './input.js';
-import { Locomotion } from './locomotion.js';
+import { FLY_CEILING, Locomotion, WORLD_BOUND } from './locomotion.js';
 import { Avatar, EYE_HEIGHT } from './avatar.js';
 import { CameraRig } from './camera.js';
 import { Dev } from './dev.js';
@@ -88,7 +90,16 @@ const modelPreset = !explicitSet && SETS[presetId]?.model ? presetId : null;
 const set = SETS[explicitSet ?? modelPreset ?? SET_ID];
 if (!set) throw new Error(`Unknown set "${SET_ID}"; known: ${Object.keys(SETS).join(', ')}`);
 applyEnvironment(scene, look, set.environment);
-if (set.workspace) blocks.position.set(set.workspace[0], 0, set.workspace[1]);
+if (set.environment?.fog) { // nothing past the fog's end is visible, so the far plane (and so the culling) stops there
+  camera.far = set.environment.fog[2] + 10;
+  camera.updateProjectionMatrix();
+}
+if (set.workspace) {
+  blocks.position.set(set.workspace[0], 0, set.workspace[1]);
+  look.sun.position.add(blocks.position); // the sun's shadow box follows the blocks
+  look.sun.target.position.copy(blocks.position);
+  look.sun.target.updateMatrixWorld();
+}
 window.app.set = set;
 // Sets with a `dragon` setting get one circling overhead: decoration, never in `blocks`, placed from the wall clock so both laptops agree.
 const dragon = set.dragon ? new Dragon(scene, set.dragon) : null;
@@ -104,12 +115,34 @@ if (presetId && !explicitSet && !modelPreset) {
 window.app.setReady = loadSetModel(set, scene, new GLTFLoader()).then(root => {
   window.app.scenery = root;
   if (root) console.info(`[set] ${set.name}: ${JSON.stringify(sceneryStats(root))}`);
+  return root; // the props below build on the loaded city
 }).catch(error => console.error(`[set] could not load ${set.name}: ${error.message}`));
 
 // Avatar, camera rig and input. Keys and mouse are read only in input.js; everything below consumes intents.
 const input = new Input(renderer.domElement, { mouseFallback: TRACKER_SOURCE === 'mouse' });
 // Each user spawns at their own end of the blocks, a few steps back, looking down at them.
-const locomotion = new Locomotion({ spawn: SPAWNS[USER_ID] ?? SPAWNS.A });
+// A set with a workspace moves the blocks and both spawns there, and a big one raises the walking bound to cover it.
+const spawn = SPAWNS[USER_ID] ?? SPAWNS.A;
+const [shiftX, shiftZ] = set.workspace ?? [0, 0];
+const locomotion = new Locomotion({
+  spawn: { ...spawn, pos: [spawn.pos[0] + shiftX, spawn.pos[1], spawn.pos[2] + shiftZ] },
+  bound: set.bound ?? WORLD_BOUND,
+  ceiling: set.ceiling ?? FLY_CEILING,
+});
+// The set's extras (parked and hovering cars, Eve and Wall-E by the blocks, the airship), built once the city is in.
+let setProps = null;
+window.app.propsReady = window.app.setReady.then(city => {
+  if (!city || !set.props) return null;
+  // Lamps are shared objects like the blocks: every laptop builds the same ones (same ids), the host's scenes keep them in step.
+  const addLamp = spec => {
+    try { sync.adopt(objects.add(spec, { place: false, remember: false, notify: false })); } catch (error) { console.warn(`[props] lamp ${spec.id}: ${error.message}`); }
+  };
+  return loadSetProps(set, { scene, loader: new GLTFLoader(), city, addLamp, rand: random(worldSeed(set.name)) });
+}).then(loaded => {
+  setProps = loaded;
+  window.app.props = loaded;
+  if (loaded) console.info(`[props] ${JSON.stringify(loaded.stats)}`);
+}).catch(error => console.error(`[props] could not build ${set.name}'s extras: ${error.message}`));
 const avatar = new Avatar(scene);
 // Floors are the world's: decks and paths you stand on (0 until a preset world has loaded).
 const floorAt = (x, z) => world?.floorAt(x, z) ?? 0;
@@ -289,6 +322,7 @@ renderer.setAnimationLoop(() => {
   gestureUI.update();
   world?.update(performance.now() / 1000);
   dragon?.update();
+  setProps?.update(dt, now / 1000, view);
   steerDust(dt);
   dust.update(dt);
   dev.update({

@@ -56,6 +56,14 @@ export class SceneSync {
     }
   }
 
+  // Registers an assembly this laptop built itself rather than through an op (the street lamps, which every laptop builds
+  // the same way from the same layout): scenes carry it, holds on it stream, and its recipe goes out with the next scene.
+  adopt(root) {
+    this.meshes.set(root.userData.id, root);
+    this.needSpec.add(root.userData.id);
+    this.lastScene = -Infinity;
+  }
+
   assemblySnapshot(root) {
     return { ...this.assemblyTransform(root), spec: renderSpec(root.userData.spec) };
   }

@@ -287,11 +287,12 @@ async def main():
         await c.js('app.renderer.setPixelRatio(1); app.renderer.shadowMap.enabled = false; 0')
         await c.js('app.setReady.then(() => 0)')
         stats = await c.js('(async () => { const m = await import("/scenery.js"); return m.sceneryStats(app.scenery); })()')
-        assert stats == dict(triangles=64171, meshes=30, materials=30), stats
+        assert stats['triangles'] == 64171 and stats['materials'] == 30 and stats['meshes'] >= 30, stats  # chunked into cells: more meshes than the file's 30
         assert await c.js('app.scenery.parent === app.scene && !app.blocks.children.some(o => o.userData.scenery)'), 'scenery must not be in blocks'
         assert await c.js("['b1','b2','b3','b4','b5'].every(id => app.blocks.children.some(o => o.userData.id === id))"), 'starter blocks exist'
-        assert await c.js('app.blocks.position.x') == 2, 'the workspace sits beside the city'
+        assert await c.js('app.blocks.position.x') == await c.js('app.set.workspace[0]'), 'the blocks sit at the set\'s workspace'
         assert await c.js('app.look.grid.visible') is False
+        placed = await c.js('app.scenery.getWorldPosition(new app.camera.position.constructor()).toArray()')
         # A page that just joined is still easing its blocks to the host's poses; let that finish first.
         poses = 'JSON.stringify(app.blocks.children.map(o => o.position.toArray().map(v => Math.round(v * 1000))))'
         before, still = await c.js(poses), 0
@@ -317,7 +318,7 @@ async def main():
         after = await c.js(poses)
         assert after == before, f'no block moved either: {before} -> {after}; holders A={await a.js("JSON.stringify([...app.sync.holders])")} C={await c.js("JSON.stringify([...app.sync.holders])")}'
         moved = await c.js('app.scenery.getWorldPosition(new app.camera.position.constructor()).toArray()')
-        assert max(abs(v) for v in moved) < 5, moved
+        assert max(abs(a - b) for a, b in zip(moved, placed)) < 1e-6, (placed, moved)
         print(f"PASS: the cyberpunk city loads as scenery ({stats['triangles']} triangles, {stats['meshes']} meshes) and cannot be targeted or grabbed")
 
         for p in (a, b, *extra):

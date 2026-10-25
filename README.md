@@ -62,6 +62,8 @@ web/
   remote-avatar.js     The other user: their walking body, head turn, hands, and what they are looking at
   mock.js              Camera-free tracker for development using the same protocol
   mouse-tracker.js     Mouse-as-hand fallback (`?tracker=mouse`): cursor is gaze and hand, left button pinches
+  props.js             A set's extras: painted roads, cars on the roads and hovering above, movable street lamps, Eve and Wall-E by the blocks, an airship circling the area (planning is pure)
+  roads.js             Roads from the model's ground: pavement strip, asphalt, kerbs, white lines, the road middle lines (pure; texture built from a data array)
   sets.js, scenery.js  Set registry (model, scale, night environment) and the helpers that place a model as non-interactive scenery
   assets/              Set models (`.glb`) and `CREDITS.md`. Add third-party models here and credit them
   objects.js           Primitive assembly rendering, free-space placement, undo and disposal
@@ -117,10 +119,18 @@ A set is the world around the blocks: an optional 3D model plus the sky, fog, li
 | `workshop` | `http://localhost:8000/` | The plain starting room: floor, grid and blocks |
 | `cyberpunk` | `http://localhost:8000/?set=cyberpunk` (add `&user=B` on the other laptop) | A neon night city model between the two users, with the blocks moved beside it |
 
-- **Scenery, not objects.** The model is added to the scene outside `blocks`, so it can't be targeted, grabbed or synced; hovering or dragging on it does nothing. Its transforms are frozen after loading, so it costs almost nothing per frame (about 45 draw calls and 97k triangles with the avatar and blocks).
-- **It is a miniature.** "Cyberpunk City - #1" is 9 m wide with 3 m towers and streets about 1 m wide, too tight to walk through at any scale. It is shown at 0.3x (2.8 m wide, 0.9 m tall) like a model on the floor, and your hands reach in. Avatars can still fly through it (no collisions).
-- **Console:** `app.set`, `app.scenery` and `app.look` (lights and floor, to tweak live). The console prints `[set] Cyberpunk city: {triangles, meshes, materials}` once it loads.
-- **Add a set:** put the `.glb` in `web/assets/<set>/`, add an entry to `SETS` in `web/sets.js` (`model`, `scale`, `center`, `workspace`, `environment`, `credit`) and list it in `web/assets/CREDITS.md`. A test fails if the file is missing, invalid, or has no credit.
+- **Scenery, not objects.** The model is added to the scene outside `blocks`, so it can't be targeted, grabbed or synced; hovering or dragging on it does nothing. Its transforms are frozen after loading.
+- **Human scale.** The source model is a 9 m miniature (3 m towers, 1 m streets), so it is scaled 15x: towers about 46 m (a modern high-rise next to a 1.7 m person), streets about 15 m, 138 m across. The model is lowered 0.9 m (`ground` in `web/sets.js`) so its streets are at y = 0, where you and the blocks stand (before, you were inside the ground). The blocks and both spawns sit in the open street nearest the middle, 14 m east of the centre (`workspace`), with nothing overhead; walking and flying are allowed across the whole city (`bound` 90 m, `ceiling` 60 m, so you can fly over the towers). Avatars can still pass through buildings (no collisions).
+- **Optimizations.** The model is split into 64 m cells so the camera skips whatever is out of view; the far plane is the fog's end (120 m), so nothing beyond the haze is drawn; scenery casts and receives no shadows; the sun's shadow box follows the blocks. In a one-off headless run (software GL, so no fps) the view from the spawn drew 17 to 113 calls depending on the user's facing, and about 69 calls and 37k triangles from 45 m up. **Not measured on a real display.** If frames drop, lower `fog` far in the set, raise or lower `chunk`, or lower the pixel ratio in `createRenderer`.
+- **Roads and pavement (`web/roads.js`).** The model's ground is bare, so a texture is painted over it from the model itself. Its road-level ground becomes asphalt with a **pavement strip along every building** (up to 1.2 m, and at most 30% of the open width, so a narrow road stays a road), a light kerb and a thin **white edge line**, plus a **dashed white centre line** on roads wide enough for two lanes; its plaza-level ground (13 cm higher) becomes tiled pavement. Buildings and ground-less areas stay transparent. **The roads are connected:** an overpass or walkway no longer cuts the road under it (the road map used to treat everything below any structure as solid), and pieces of road that still stop at a gap are joined by new roads (found by a shortest-path search around the buildings, up to 70 m, with pavement edges), so the whole network is one piece; a few tiny fragments walled off from the rest stay separate. Change the strip with `props.roads.sidewalk`, the joining with `props.roads.join` in `web/sets.js`.
+- **Floating junction lights.** A hovering light 7.5 m above each place where roads meet (about 12), each a dark disc with a glowing underside and a faint cone of light down to the road, in rotating pink, cyan and amber. They bob slightly; three instanced meshes in all.
+- **Cars (`web/props.js`).** About 60, in every part of the city (the same on both laptops): 20 drive the roads in lanes (a lane each way where the road is wide, one down the middle where it is narrow, always wholly on asphalt, 9 to 17 m behind the next, parked in place), and 40 hover at 4, 9, 13, 19 or 27 m over the built-up area (they bob slightly), each in its own neon colour. None is inside a building. They are instanced per 50 m square of the city, so squares out of view or past the draw distance cost nothing. Tune with `props.cars` in `web/sets.js`.
+- **Street lamps.** About 14, 9.8 m tall, on the pavement beside the road, 17 to 24 m apart, within 70 m of the blocks. They are **ordinary shared objects like the blocks**: look at one and pinch to pick it up and carry it, and the other laptop sees it move. (They were first built in world coordinates inside the blocks group, which is offset to the workspace, so they stood 14 m from where planned, away from the roads and from where you look: that is why they could not be grabbed.) They count toward the 64-object limit and are not undoable. Both laptops must open the same preset.
+- **Eve** (1.5 m, about the avatar's size, hovering and bobbing, glowing eyes) and **Wall-E** (1.1 m, built from primitives; there is no model) stand west of the blocks facing them.
+- **Airship** (32 m, 130k triangles merged into 9 meshes) flies a level circle of 95 m radius around the spawn at 50 m up (above the tallest building, just inside the draw distance), one slow lap every five minutes (about 2 m/s). Look up to see it; the circle mostly passes outside the city. If it flies backwards, set `yawOffset: Math.PI` on `airship` in `web/sets.js`.
+- Tune everything under `props` in `web/sets.js`. The console prints `[props] {...}` with what was built; `app.props` has `layout` (the cars and lamps) and `world` (the road map).
+- **Console:** `app.set`, `app.scenery` (its meshes are the cells) and `app.look` (lights and floor, to tweak live). The console prints `[set] Cyberpunk city: {triangles, meshes, materials}` once it loads.
+- **Add a set:** put the `.glb` in `web/assets/<set>/`, add an entry to `SETS` in `web/sets.js` (`model`, `scale`, `center`, `workspace`, `chunk`, `bound`, `ceiling`, `shadows`, `environment`, `credit`) and list it in `web/assets/CREDITS.md`. A test fails if the file is missing, invalid, or has no credit.
 - **Credit:** the city is by born2012 (CC BY 4.0); see `web/assets/CREDITS.md`.
 
 Open [localhost:8000](http://localhost:8000). `TRACKER_SOURCE = 'websocket'` is the default. The HUD changes from `connecting` / `waiting for camera` to `live`, with tracker Hz. Raise your hands to see the skeletons; thumb-index pinches produce `pinch_start` / `pinch_end` in the HUD.
@@ -176,7 +186,7 @@ The target is a steady 60 fps. If a large or high-DPI window drops below that, l
 
 ### Two users (milestone 5)
 
-The two users spawn at opposite ends of the blocks, facing each other, and can walk around with the movement keys shown in the controls panel (arrow keys walk and turn). Laptop A is the scene authority.
+The two users spawn at opposite ends of the blocks, facing each other, and can walk around with the movement keys listed under **Settings** (top right) (arrow keys walk and turn). Laptop A is the scene authority.
 
 ```bash
 # Laptop A only
@@ -348,7 +358,7 @@ node --test tests/scenery.test.mjs
 .venv/bin/python tests/e2e/run.py
 ```
 
-The unit tests cover placement (scaled, stood on y = 0, footprint centred), freezing and shadow flags, triangle/mesh/material counts, disposal, and that every set with a model points at a valid `.glb` with a credit, a sane scale and a clear workspace. The e2e loads `?set=cyberpunk` (64,171 triangles), checks the model is outside `blocks`, and that hovering and click-dragging on it targets and grabs nothing. **Manual check still needed:** look at it on a real display, since headless frame rates are meaningless.
+The unit tests cover placement (scaled, stood on y = 0, footprint centred), freezing and shadow flags, triangle/mesh/material counts, disposal, `chunkScenery` (every triangle kept, placement unchanged, cells beyond the far plane culled), and that every set with a model points at a valid `.glb` with a credit, a sane scale and a clear workspace. The e2e loads `?set=cyberpunk` (64,171 triangles), checks the model is outside `blocks`, and that hovering and click-dragging on it targets and grabs nothing. **Manual check still needed:** look at it on a real display, since headless frame rates are meaningless.
 
 ## Milestone 2 checks
 
