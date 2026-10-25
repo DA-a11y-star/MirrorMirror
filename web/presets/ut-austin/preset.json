@@ -1,0 +1,125 @@
+{
+  "format": "mirrormirror.preset",
+  "version": 1,
+  "id": "ut-austin",
+  "name": "UT Austin",
+  "description": "The Tower, the South Mall and live oaks on the Forty Acres.",
+  "tint": "#bf5700",
+  "view": {"yaw": 0, "pitch": 9},
+  "environment": {
+    "sky": ["#5f9bd6", "#f6dcc0"],
+    "fog": ["#f1dcc4", 26, 95],
+    "ground": "#7da35a",
+    "sun": {"color": "#ffe2b8", "intensity": 2.6, "position": [-8, 9, 6]},
+    "ambient": ["#cfe3ff", "#6b7d4a", 1.1]
+  },
+  "objects": {
+    "tower": [
+      {"shape": "box", "size": [8, 4, 8], "pos": [0, 2, 0], "color": "#e3d4b2"},
+      {"shape": "box", "size": [5, 24, 5], "pos": [0, 16, 0], "color": "#eadfc6", "pattern": {"type": "windows", "rows": 12, "cols": 3, "lit": 0, "color": "#bcae8c"}},
+      {"shape": "cylinder", "size": [2.2, 0.2, 2.2], "pos": [0, 25.4, 2.56], "color": "#f8f2e4", "rot": [90, 0, 0]},
+      {"shape": "cylinder", "size": [2.2, 0.2, 2.2], "pos": [0, 25.4, -2.56], "color": "#f8f2e4", "rot": [90, 0, 0]},
+      {"shape": "cylinder", "size": [2.2, 0.2, 2.2], "pos": [2.56, 25.4, 0], "color": "#f8f2e4", "rot": [0, 0, 90]},
+      {"shape": "cylinder", "size": [2.2, 0.2, 2.2], "pos": [-2.56, 25.4, 0], "color": "#f8f2e4", "rot": [0, 0, 90]},
+      {"shape": "box", "size": [6, 0.8, 6], "pos": [0, 27.6, 0], "color": "#d8cba9"},
+      {"shape": "box", "size": [4.6, 3, 4.6], "pos": [0, 29.5, 0], "color": "#bf5700", "emissive": "#ff7a1a"},
+      {"shape": "box", "size": [0.6, 3, 0.6], "pos": [-2.6, 29.5, -2.6], "color": "#f3e9d2"},
+      {"shape": "box", "size": [0.6, 3, 0.6], "pos": [-2.6, 29.5, 2.6], "color": "#f3e9d2"},
+      {"shape": "box", "size": [0.6, 3, 0.6], "pos": [2.6, 29.5, -2.6], "color": "#f3e9d2"},
+      {"shape": "box", "size": [0.6, 3, 0.6], "pos": [2.6, 29.5, 2.6], "color": "#f3e9d2"},
+      {"shape": "box", "size": [0.6, 3, 0.6], "pos": [0, 29.5, 2.6], "color": "#f3e9d2"},
+      {"shape": "box", "size": [0.6, 3, 0.6], "pos": [0, 29.5, -2.6], "color": "#f3e9d2"},
+      {"shape": "box", "size": [0.6, 3, 0.6], "pos": [2.6, 29.5, 0], "color": "#f3e9d2"},
+      {"shape": "box", "size": [0.6, 3, 0.6], "pos": [-2.6, 29.5, 0], "color": "#f3e9d2"},
+      {"shape": "box", "size": [6.2, 0.8, 6.2], "pos": [0, 31.4, 0], "color": "#d8cba9"},
+      {"shape": "cone", "size": [7.8, 4, 7.8], "pos": [0, 33.8, 0], "color": "#c9a96b", "rot": [0, 45, 0], "sides": 4},
+      {"shape": "box", "size": [1.6, 2, 1.6], "pos": [0, 36.6, 0], "color": "#eadfc6"},
+      {"shape": "cone", "size": [2.2, 1.6, 2.2], "pos": [0, 38.4, 0], "color": "#bf5700", "rot": [0, 45, 0], "sides": 4}
+    ],
+    "main-building": [
+      {"shape": "box", "size": [44, 10, 9], "pos": [0, 5, 0], "color": "#e4d5b3", "pattern": {"type": "windows", "rows": 3, "cols": 16, "lit": 0.15, "color": "#4a5266", "glow": "#ffd9a0"}},
+      {"shape": "box", "size": [45, 0.6, 9.6], "pos": [0, 10.1, 0], "color": "#d8cba9"},
+      {"shape": "box", "size": [45, 1.2, 10], "pos": [0, 10.9, 0], "color": "#b5653a"}
+    ],
+    "walk": [
+      {"shape": "box", "size": [7, 0.06, 84], "pos": [0, 0.03, -14], "color": "#d9ccb0"},
+      {"shape": "box", "size": [38, 0.06, 4], "pos": [0, 0.035, 9], "color": "#d9ccb0"}
+    ],
+    "fountain": [
+      {"shape": "cylinder", "size": [9, 0.8, 9], "pos": [0, 0.4, 0], "color": "#cdbf9f", "sides": 24},
+      {"shape": "cylinder", "size": [8.2, 0.12, 8.2], "pos": [0, 0.84, 0], "color": "#5fa8d3", "sides": 24},
+      {"shape": "cylinder", "size": [3, 1.4, 3], "pos": [0, 1.5, 0], "color": "#d9cba9", "sides": 16},
+      {"shape": "cylinder", "size": [1.2, 2.2, 1.2], "pos": [0, 3.2, 0], "color": "#cdbf9f", "sides": 12},
+      {"shape": "sphere", "size": [1.6, 1.1, 1.6], "pos": [0, 4.7, 0], "color": "#d7eef9", "sides": 10}
+    ],
+    "oak": [
+      {"shape": "cylinder", "size": [0.6, 2.4, 0.6], "pos": [0, 1.2, 0], "color": "#6b4a2e", "sides": 7},
+      {"shape": "sphere", "size": [4.6, 2.4, 4.2], "pos": [0, 3.4, 0], "color": "#4e7a3a", "sides": 7},
+      {"shape": "sphere", "size": [3, 2, 3], "pos": [1.5, 3.9, 0.7], "color": "#5b8a45", "sides": 7},
+      {"shape": "sphere", "size": [2.8, 1.8, 2.8], "pos": [-1.4, 3.7, -0.6], "color": "#476f34", "sides": 7}
+    ],
+    "lamp": [
+      {"shape": "cylinder", "size": [0.35, 0.3, 0.35], "pos": [0, 0.15, 0], "color": "#2f3747", "sides": 8},
+      {"shape": "cylinder", "size": [0.14, 3.6, 0.14], "pos": [0, 1.8, 0], "color": "#2f3747", "sides": 8},
+      {"shape": "sphere", "size": [0.48, 0.48, 0.48], "pos": [0, 3.75, 0], "color": "#fff3d6", "emissive": "#ffd890", "sides": 8}
+    ],
+    "bench": [
+      {"shape": "box", "size": [1.8, 0.1, 0.55], "pos": [0, 0.48, 0], "color": "#8a5a33"},
+      {"shape": "box", "size": [1.8, 0.45, 0.08], "pos": [0, 0.82, -0.26], "color": "#8a5a33"},
+      {"shape": "box", "size": [0.08, 0.48, 0.5], "pos": [-0.8, 0.24, 0], "color": "#3b4558"},
+      {"shape": "box", "size": [0.08, 0.48, 0.5], "pos": [0.8, 0.24, 0], "color": "#3b4558"}
+    ],
+    "bluebonnets": [
+      {"shape": "sphere", "size": [1.8, 0.14, 1.3], "pos": [0, 0.07, 0], "color": "#5d8f45", "sides": 7},
+      {"shape": "sphere", "size": [0.32, 0.55, 0.32], "pos": [-0.5, 0.35, 0.1], "color": "#4c6ef5", "sides": 5},
+      {"shape": "sphere", "size": [0.32, 0.55, 0.32], "pos": [-0.15, 0.35, -0.3], "color": "#3b5bdb", "sides": 5},
+      {"shape": "sphere", "size": [0.32, 0.55, 0.32], "pos": [0.25, 0.35, 0.25], "color": "#4c6ef5", "sides": 5},
+      {"shape": "sphere", "size": [0.32, 0.55, 0.32], "pos": [0.55, 0.35, -0.15], "color": "#3b5bdb", "sides": 5},
+      {"shape": "sphere", "size": [0.32, 0.55, 0.32], "pos": [0.05, 0.35, 0.45], "color": "#5c7cfa", "sides": 5},
+      {"shape": "sphere", "size": [0.16, 0.16, 0.16], "pos": [-0.5, 0.68, 0.1], "color": "#f4f6ff", "sides": 5},
+      {"shape": "sphere", "size": [0.16, 0.16, 0.16], "pos": [0.25, 0.68, 0.25], "color": "#f4f6ff", "sides": 5},
+      {"shape": "sphere", "size": [0.16, 0.16, 0.16], "pos": [0.55, 0.68, -0.15], "color": "#f4f6ff", "sides": 5}
+    ],
+    "flag": [
+      {"shape": "cylinder", "size": [0.1, 5.2, 0.1], "pos": [0, 2.6, 0], "color": "#c9ced6", "sides": 6},
+      {"shape": "box", "size": [1.7, 1.05, 0.04], "pos": [0.9, 4.5, 0], "color": "#bf5700"}
+    ],
+    "bevo": [
+      {"shape": "box", "size": [2.2, 1.2, 1.2], "pos": [0, 0.6, 0], "color": "#d8ccb0"},
+      {"shape": "box", "size": [1.6, 0.8, 0.7], "pos": [0, 1.95, 0], "color": "#bf5700"},
+      {"shape": "box", "size": [0.2, 0.4, 0.2], "pos": [-0.6, 1.35, -0.22], "color": "#a34a00"},
+      {"shape": "box", "size": [0.2, 0.4, 0.2], "pos": [-0.6, 1.35, 0.22], "color": "#a34a00"},
+      {"shape": "box", "size": [0.2, 0.4, 0.2], "pos": [0.6, 1.35, -0.22], "color": "#a34a00"},
+      {"shape": "box", "size": [0.2, 0.4, 0.2], "pos": [0.6, 1.35, 0.22], "color": "#a34a00"},
+      {"shape": "box", "size": [0.55, 0.55, 0.55], "pos": [1, 2.3, 0], "color": "#a34a00"},
+      {"shape": "cylinder", "size": [0.12, 1.8, 0.12], "pos": [1.1, 2.62, 0], "color": "#f1e4c8", "rot": [90, 0, 0], "sides": 6}
+    ]
+  },
+  "place": [
+    {"object": "walk", "pos": [0, 0, 0]},
+    {"object": "tower", "pos": [0, 0, -42], "scale": 0.8, "clear": 8},
+    {"object": "main-building", "pos": [0, 0, -47], "scale": 0.8},
+    {"pos": [-13, 0, -46], "clear": 7},
+    {"pos": [13, 0, -46], "clear": 7},
+    {"object": "fountain", "pos": [0, 0, 15], "clear": 6.5},
+    {"pos": [0, 0, -38], "clear": 4.2},
+    {"pos": [0, 0, -31], "clear": 4.2},
+    {"pos": [0, 0, -24], "clear": 4.2},
+    {"pos": [0, 0, -17], "clear": 4.2},
+    {"pos": [0, 0, -10], "clear": 4.2},
+    {"pos": [0, 0, -3], "clear": 4.2},
+    {"pos": [0, 0, 4], "clear": 4.2},
+    {"pos": [0, 0, 11], "clear": 4.2},
+    {"pos": [0, 0, 18], "clear": 4.2},
+    {"pos": [0, 0, 25], "clear": 4.2},
+    {"pos": [-16, 0, 9], "clear": 3},
+    {"pos": [-10, 0, 9], "clear": 3},
+    {"pos": [10, 0, 9], "clear": 3},
+    {"pos": [16, 0, 9], "clear": 3}
+  ],
+  "scatter": [
+    {"objects": ["oak"], "count": [16, 24], "radius": [7, 42], "scale": [0.85, 1.35], "spacing": 6.5},
+    {"objects": ["lamp"], "count": [6, 10], "radius": [5, 20], "spacing": 4},
+    {"objects": ["bench", "bench", "bluebonnets", "bluebonnets", "bluebonnets", "flag", "bevo"], "count": [10, 16], "radius": [4, 24], "spacing": 2.6}
+  ]
+}

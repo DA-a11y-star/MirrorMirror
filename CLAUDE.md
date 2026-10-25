@@ -28,6 +28,8 @@ tracker/   main.py, capture.py, hands.py, gaze.py, gestures.py, filters.py (One 
 voice/     main.py, muse.py, planner.py, layout.py, schema.py
 relay/     relay.py
 web/       index.html, main.js, config.js, scene.js
+           landing.js, landing.css, panorama.js, presets.js, set-scene.js, set-layout.js
+           presets/ (index.json registry + one folder per preset: preset.json)
            hands.js, tracker.js, mock.js, offaxis.js
            gaze.js, gaze-ui.js, gaze-validation.js
            interaction.js
@@ -36,7 +38,7 @@ web/       index.html, main.js, config.js, scene.js
            avatar.js, remote-avatar.js
            net.js, sync.js, object-protocol.js, objects.js
            voice.js, voice-ui.js
-           vendor/ (three.js 0.186, OrbitControls)
+           vendor/ (three.js 0.186, OrbitControls, fonts/ for the landing page)
 tests/     Node (*.test.mjs) and Python (test_*.py)
 README.md, MOVEMENT_CAMERA.md (the movement/camera task spec), GESTURE_UX.md (the gesture task spec)
 hand_landmarker.task, face_landmarker.task (MediaPipe models, committed so venue Wi-Fi isn't needed)
@@ -52,6 +54,7 @@ cd web && python -m http.server 8000       # laptop A; laptop B can open A's ser
 python -m voice.main                       # only on a laptop that generates objects; key comes from .env
 ```
 - **API key:** copy `.env.example` to `.env` and set `MODEL_API_KEY` there. `.env` is git-ignored (never commit it) and is re-read on every request, so edits need no restart. A terminal variable still works as a fallback; the file wins.
+- The page opens on the **landing page** (pick a preset, then Play). Play adds `?preset=<id>` to the URL and loads the workspace; a URL that already has `?preset=` skips the menu (reloads mid-demo, scripted tests). Nothing touches the camera, tracker or relay until Play.
 - Laptop A opens `http://localhost:8000`. Laptop B opens `http://<A's address>:8000/?user=B` and runs only its own tracker. Find A's address with `ipconfig getifaddr en0`.
 - `web/config.js` holds `USER_ID`, `HOST_ID`, `RELAY_URL`, `TRACKER_URL`, `VOICE_URL`, screen size in meters (for the depth effect), `PARALLAX_STRENGTH`, `DEV_ORBIT`. `user`, `relay` and `tracker` can be overridden in the page URL (`?user=B&relay=ws://localhost:8765&tracker=mock`). **No IP address is hard-coded**: the relay is looked up on the machine that served the page.
 - One laptop, two users: open two browser **windows** (not tabs: a background tab stops rendering and sending). Arrow keys move only the window you last clicked.
@@ -141,9 +144,17 @@ Verification legend: **unit** = Node/Python tests, **sim** = scripted simulation
 
 **Voice and shared objects (M7, teammate).** Browser records up to 15 s, converts to 24 kHz mono WAV, `voice/` transcribes (`muse-voice-transcribe-1.0`) and plans (`muse-wonder-1.0`, strict JSON schema, ≤40 parts, placement relations, symmetric `corners_below` legs, one repair attempt), then `web/objects.js` builds and places the assembly in free space; undo removes the last creation. `object-protocol.js` whitelists the render recipe. The generating browser sends `op:add|delete`; the host's `scene` carries definitions, acks and tombstones, so late joiners and reconnecting laptops reconstruct everything without a key. `ASR_MODEL` and `OBJECT_MODEL` override the model IDs.
 
+**Landing page.** `web/index.html` boots `landing.js`, which shows the menu and imports `main.js` only on Play (the workspace UI sits in a hidden `#workspace-ui`). Title "Mirror Mirror" in Bagel Fat One (a white logo with a navy block extrusion) with a reflection fading below it; UI text in Rubik (both vendored in `web/vendor/fonts/`, SIL OFL, no network). One dark look (no light/dark toggle): dark glass for the controls and the user chip; text that sits directly on the scene is white with a shadow, so it reads over daylight and night sets. Each set is an oval silver mirror: beaded rim, scrollwork crest, aged glass showing the scene (foxing, a sheen that sweeps across on hover), and an engraved silver name plaque; there is no section heading; mirror size follows the window height so the menu fits without scrolling at 1280x720 and up; click selects (the frame glows in the set tint and the crest gem lights with a check; click again or Esc clears), and Play bottom-right, disabled until a set is chosen.
+- **Background** (`panorama.js`): a Minecraft-style title panorama. The viewer stands at the center of the selected set's real 3D scene while the camera turns all the way round every 150 s, with a small bob and pointer parallax. Switching sets crossfades two WebGL canvases. With nothing selected it shows UT Austin. The loop stops and both WebGL contexts are released when the workspace starts. Reduced motion slows it to 15%.
+- **Scenes** (`set-scene.js`, placement in `set-layout.js`): built from the workspace's four primitives (low-poly, flat shaded): gradient sky dome, fog, ground disc, sun with shadows and hemisphere light, fixed landmarks, randomly scattered props, optional glowing motes (fireflies). Every copy of an object is one `InstancedMesh` per part. The scatter is re-randomized on every visit (seeded from the clock), so each set shows a different selection and arrangement of its props each time. The same build renders each card's picture, so a card shows the scene the background will show.
+- **Presets** are self-contained JSON files (`web/presets/<id>/preset.json`), listed in `web/presets/index.json` (`presets` for the grid, `background` for the default). Format, documented at the top of `presets.js`: header (`format: "mirrormirror.preset"`, `version`, `id`, `name`, optional `description`, `tint`, `thumbnail` image, `view`), `environment` (sky, fog, ground, sun, ambient, particles), `objects` (named lists of primitive parts with optional glow, facet count and a lit-windows facade pattern), `place` (landmarks and reserved zones) and `scatter` (random props: count and radius ranges, scale, stretch, spacing, ring or road placement, road margins, height, facing snap). Add a set by dropping in a folder and one registry line. Built-ins and future imports share `parsePreset(text, baseUrl)`: everything is bounds-checked, colors must be hex, a thumbnail must be http(s), `blob:` or `data:image/`; a broken preset is skipped and reported instead of blanking the menu. The import UI is not built.
+- **Built-in sets:** UT Austin (South Mall in late afternoon: the Tower lit orange, Main Building, fountain; live oaks, lamps, benches, bluebonnets, flags, longhorn statues), Workshop (maker yard at golden hour: barn, deck with workbenches; crates, lumber, barrels, sawhorses, starter-color block stacks, fences, trees), Enchanted Forest (moonlit: great tree with lanterns, glowing pond; pines, glowing mushrooms, crystals, logs, rocks, lantern posts, fireflies), Neon City (crossroads at dusk: crosswalks, traffic lights; lit towers with neon signs, cars in lanes, street lamps, hydrants, cones, benches, planters). The workspace receives the choice as `currentPreset()` in `config.js` (`window.app.presetId`, shown in the HUD) but nothing uses it yet; sets (B) should build their world from these same scene definitions.
+- Verified by **unit** tests (`tests/presets.test.mjs`, `tests/set-layout.test.mjs`; mutation-checked: URL allow-list, shape whitelist, unknown object references, scatter cap, duplicate ids, version, road margins, clear zones, spacing, ring radius, snap, scatter height, pool variety) and headless-Chrome screenshots of every set at 1440×900, 1366×768, 1280×720 and 390×844, including Play into the workspace (144 fps there, landing contexts released). Landing loop measured at 145 fps headless. Not yet tried on the demo laptops.
+- The out-of-repo two-browser e2e opens the page without `?preset=` and now lands on the menu: add `&preset=workshop` to its URLs.
+
 **Gaze validation (partial).** `web/gaze-validation.js` has the held-out target list and the mean/p90 error summary, with tests. It is **not wired into the UI** (see Known issues).
 
-**Tests.** 121 Node tests (120 pass) and 38 Python tests pass on `main` (`4921f31`). Multiplayer logic was mutation-checked. The two-browser e2e passed on the integrated `main`.
+**Tests.** 121 Node tests (120 pass) and 38 Python tests pass on `main` (`4921f31`); the landing page adds 12 Node tests (133, 132 pass). Multiplayer logic was mutation-checked. The two-browser e2e passed on the integrated `main`.
 
 ## Known issues and verification debt (most important first)
 1. **Nothing has run live.** Not on two real laptops, not with real eyes, not with a real head turn. The head-rotation sign in `headQuaternion` is derived from the tracker's conventions and unit-tested, not checked on a real head (if the avatar turns the wrong way, fix it in that one function).
@@ -260,7 +271,7 @@ Options, roughly in order:
 - Are Muse and internet guaranteed at the venue? That decides how much to lean on the built-in library and offline fallbacks. Yes there will be internet
 - Sound: synthesized with Web Audio (assumed, no licensing) or recorded files? Web Audio
 - Which set is the default at demo time, and who switches sets? Answered with login implmentation:
-Task: Build a landing/front page for Mirror Mirror
+Task: Build a landing/front page for Mirror Mirror — **implemented** (see Implemented → Landing page); the original brief is kept below.
 
 We’ve added a lot of new functionality, and now I want a front page that users see when they first load the app. get context on the project and its existing design, and match the current visual theme and component conventions.
 
