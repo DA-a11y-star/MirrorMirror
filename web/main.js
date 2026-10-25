@@ -31,6 +31,7 @@ import { DustCloud } from './dust.js';
 import { Library } from './library.js';
 import { LibraryUI } from './library-ui.js';
 import { Dragon } from './dragon.js';
+import { buildSetAtmosphere } from './set-atmosphere.js';
 import { Gestures } from './gestures.js';
 import { GestureUI } from './gesture-ui.js';
 
@@ -107,6 +108,8 @@ if (set.workspace) {
   look.sun.target.updateMatrixWorld();
 }
 window.app.set = set;
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const atmosphere = buildSetAtmosphere(scene, set);
 // Sets with a `dragon` setting get one circling overhead: decoration, never in `blocks`, placed from the wall clock so both laptops agree.
 const dragon = set.dragon ? new Dragon(scene, set.dragon) : null;
 window.app.dragon = dragon;
@@ -131,7 +134,7 @@ const input = new Input(renderer.domElement, { mouseFallback: TRACKER_SOURCE ===
 const spawn = SPAWNS[USER_ID] ?? SPAWNS.A;
 const [shiftX, shiftZ] = set.workspace ?? [0, 0];
 const locomotion = new Locomotion({
-  spawn: { ...spawn, pos: [spawn.pos[0] + shiftX, spawn.pos[1], spawn.pos[2] + shiftZ] },
+  spawn: { ...spawn, pitch: set.environment?.sky ? 0 : spawn.pitch, pos: [spawn.pos[0] + shiftX, spawn.pos[1], spawn.pos[2] + shiftZ] },
   ceiling: set.ceiling ?? FLY_CEILING,
 });
 // The set's extras (parked and hovering cars, Eve and Wall-E by the blocks, the airship), built once the city is in.
@@ -143,11 +146,11 @@ window.app.setReady.then(city => { // the edge of the world is the edge of the s
 });
 window.app.propsReady = window.app.setReady.then(city => {
   if (!city || !set.props) return null;
-  // Lamps are shared objects like the blocks: every laptop builds the same ones (same ids), the host's scenes keep them in step.
-  const addLamp = spec => {
-    try { sync.adopt(objects.add(spec, { place: false, remember: false, notify: false })); } catch (error) { console.warn(`[props] lamp ${spec.id}: ${error.message}`); }
+  // Lamps and lanterns are shared objects like the blocks: every laptop builds the same ones (same ids), the host's scenes keep them in step.
+  const addShared = spec => {
+    try { sync.adopt(objects.add(spec, { place: false, remember: false, notify: false })); } catch (error) { console.warn(`[props] ${spec.id}: ${error.message}`); }
   };
-  return loadSetProps(set, { scene, loader: new GLTFLoader(), city, addLamp, rand: random(worldSeed(set.name)) });
+  return loadSetProps(set, { scene, loader: new GLTFLoader(), city, addShared, reducedMotion, rand: random(worldSeed(set.name)) });
 }).then(loaded => {
   setProps = loaded;
   window.app.props = loaded;
@@ -168,6 +171,15 @@ const gestureUI = new GestureUI(gestures);
 const dev = new Dev(scene, blocks);
 let depthFx = true;
 Object.assign(window.app, { input, locomotion, avatar, rig, gestures, gestureUI, dev, avatarState: () => locomotion.state() });
+const presentationButton = document.getElementById('presentation-toggle');
+function togglePresentation(force) {
+  const enabled = typeof force === 'boolean' ? force : !document.body.classList.contains('presentation');
+  document.body.classList.toggle('presentation', enabled);
+  presentationButton.setAttribute('aria-pressed', String(enabled));
+  presentationButton.textContent = enabled ? 'Show controls · J' : 'Presentation · J';
+}
+presentationButton.addEventListener('click', () => togglePresentation());
+togglePresentation(new URLSearchParams(location.search).get('demo') === '1');
 
 const controls = DEV_ORBIT ? new OrbitControls(camera, renderer.domElement) : null;
 if (controls) {
@@ -302,6 +314,7 @@ renderer.setAnimationLoop(() => {
   intents.look.dPitch += eyeLook.dPitch;
   if (intents.toggles.voice) voiceUI.wake();
   if (intents.toggles.dev) dev.toggle();
+  if (intents.toggles.presentation) togglePresentation();
   if (intents.toggles.library) libraryUI.toggle();
   if (intents.toggles.duplicate) libraryUI.duplicateTarget();
   if (intents.toggles.remove) libraryUI.deleteTarget();
@@ -335,8 +348,10 @@ renderer.setAnimationLoop(() => {
   libraryUI.update(interaction.target);
   gestureUI.update();
   world?.update(performance.now() / 1000);
-  dragon?.update();
-  setProps?.update(dt, now / 1000, view);
+  dragon?.update(reducedMotion ? 10 : undefined);
+  const visualTime = reducedMotion ? 10 : now / 1000;
+  atmosphere.update(visualTime, view);
+  setProps?.update(reducedMotion ? 0 : dt, visualTime, view);
   steerDust(dt);
   dust.update(dt);
   dev.update({

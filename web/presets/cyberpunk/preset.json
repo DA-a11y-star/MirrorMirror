@@ -3,9 +3,8 @@
   "version": 1,
   "id": "cyberpunk",
   "name": "Cyberpunk City",
-  "description": "A neon city at night, laid out like a model for your hands.",
+  "description": "Rain-lit streets, neon storefronts and traffic above the skyline.",
   "tint": "#ff4fd8",
-  "thumbnail": "card.jpg",
   "view": { "yaw": 0, "pitch": 6 },
   "environment": {
     "sky": ["#0a0818", "#3a1560"],

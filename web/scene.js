@@ -51,7 +51,7 @@ export function createScene(userId = 'A') {
 
 // Repaints the room for a set: sky, fog, lights and floor. Each field is optional; `environment` comes from sets.js.
 export function applyEnvironment(scene, look, environment = {}) {
-  const { background, fog, hemisphere, sun, fill, floor, grid, floorSize, floorY } = environment;
+  const { background, fog, hemisphere, sun, fill, floor, grid, floorSize, floorY, sunPosition } = environment;
   if (background != null) scene.background.setHex(background);
   if (fog) {
     scene.fog.color.setHex(fog[0]);
@@ -67,6 +67,7 @@ export function applyEnvironment(scene, look, environment = {}) {
     look.sun.color.setHex(sun[0]);
     look.sun.intensity = sun[1];
   }
+  if (sunPosition) look.sun.position.fromArray(sunPosition);
   if (fill) {
     look.fill.color.setHex(fill[0]);
     look.fill.intensity = fill[1];

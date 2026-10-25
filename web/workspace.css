@@ -179,3 +179,19 @@ html .library-target, html .library-status, html .library-empty { color: var(--m
 @media (prefers-reduced-motion: reduce) {
   #workspace-ui *, #gesture-settings *, #gesture-hud *, #library *, #voice-cue::before { animation: none !important; transition: none !important; }
 }
+
+/* Presentation keeps tracking and creation active while clearing the overlay. */
+#workspace-ui #presentation-toggle {
+  position: fixed; top: 24px; left: 24px; z-index: 4;
+  background: rgba(18, 24, 38, .94);
+}
+body.presentation #workspace-debug, body.presentation #voice-tools,
+body.presentation #gesture-hud, body.presentation #gesture-settings, body.presentation #dev,
+body.presentation .dev-label, body.presentation #library-toggle, body.presentation #library { display: none !important; }
+@media (max-width: 840px) {
+  #workspace-ui #presentation-toggle { top: 68px; left: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #mode-flash { display: none !important; }
+  #toggle-cue, #voice-cue { animation: none !important; }
+}
