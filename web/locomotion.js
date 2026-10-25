@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 
 // Intents -> avatar pose. Pure simulation: no DOM, no keyboard, no rendering.
-export const WALK_SPEED = 2; // unused: flying is always on (kept so older tests/imports still resolve)
 export const FLY_SPEED = 4; // m/s
 export const TURN_RATE = THREE.MathUtils.degToRad(120); // rad/s at full turn input
 export const ACCEL_K = 10; // 1/s, used by every smoothed velocity: vel = lerp(vel, target, 1 - exp(-k dt))

@@ -20,7 +20,7 @@ Key web-side ideas:
 - **Intents.** Keyboard and mouse are read only in `input.js`, which produces one intents object per frame. `gestures.js` turns the tracker's poses into the same object (the two are summed and clamped in `main.js`), so locomotion and camera code are unchanged.
 - **Host authority.** Laptop A owns the shared scene. Everyone else only renders what the host and the object's current holder send.
 
-Existing sensing code: `tracker/hands.py`, `tracker/gestures.py`, `tracker/filters.py` were extracted from the working `hand_mouse.py` prototype (still in the repo, still runnable). Use webcam iris tracking with screen calibration for gaze now; keep its provider replaceable by a dedicated eye tracker later. Wrap existing sensing code rather than rewriting it.
+Existing sensing code: `tracker/hands.py`, `tracker/gestures.py`, `tracker/filters.py` were extracted from the old `hand_mouse.py` prototype (since deleted). Use webcam iris tracking with screen calibration for gaze now; keep its provider replaceable by a dedicated eye tracker later. Wrap existing sensing code rather than rewriting it.
 
 ## Layout
 ```
@@ -38,7 +38,7 @@ web/       index.html, main.js, config.js, scene.js
            voice.js, voice-ui.js
            vendor/ (three.js 0.186, OrbitControls)
 tests/     Node (*.test.mjs) and Python (test_*.py)
-README.md, MOVEMENT_CAMERA.md (the movement/camera task spec), GESTURE_UX.md (the gesture task spec), hand_mouse.py, juggle.py (prototype)
+README.md, MOVEMENT_CAMERA.md (the movement/camera task spec), GESTURE_UX.md (the gesture task spec)
 hand_landmarker.task, face_landmarker.task (MediaPipe models, committed so venue Wi-Fi isn't needed)
 ```
 Planned new files are listed under Planned work (`web/sets/`, `web/library.js`, `web/gait.js`, ...).
@@ -133,17 +133,6 @@ Verification legend: **unit** = Node/Python tests, **sim** = scripted simulation
 - **Toggle:** both hands fist (each held 120 ms, onsets within 700 ms) arms it, then both hands open within 1.4 s fires; 0.8 s cooldown. Both hands must be visible, so a single fist never toggles. Arming zeroes the sticks. `M` is the keyboard fallback.
 - **Right hand = 3D move stick, all three axes:** push toward or pull back from the screen (palm scale) is forward/back, left/right is strafe, **raise/lower is fly up/down**. **Left hand = look:** moving right turns right, raise/lower pitches; it has its own `*_LOOK_*` dead zone and travel. Flying is always on and y is clamped to the floor; there is no walk mode or F toggle.
 - **Joystick feel:** rate control from a centre captured when the palm has been open 150 ms (so it never drifts); dead zones and `EXPO` 1.8 curves per axis; **axis isolation** damps the other axes by half when one is more than 2× the rest. A fist or a pinch on that hand is a clutch (only that stick recentres on the next open palm); a lost hand decays velocity over 150 ms. The two sticks are independent. When MediaPipe labels both hands the same side (a fist does this), `tracker/hands.py` assigns left and right by x position instead of dropping one.
-- **HUD:** two joystick widgets (look on the left, move on the right). On the move widget the dot's x is strafe, y is forward, and **dot size is height** (bigger = up). Dev overlay shows poses, palm, centres, raw/curved axes and the toggle state.
-
-**Depth effect (M6, teammate).** `web/offaxis.js`: the screen behaves like a window. The view moves with the tracked head and renders through an off-axis frustum, with a minimum eye distance, a slow neutral-depth drift, and a small gaze-lean (`GAZE_REACH_M`). Grabbing uses a head-independent hand mapping so moving your head doesn't drag a held object.
-
-**Movement and camera (M3, teammate).** `input.js` (intents), `locomotion.js` (walk 2 m/s, fly 4 m/s, smoothed velocity, ±20 m bound, respawn), `camera.js` (first person, third person with spring lag and zoom, free cam that is local only), `dev.js` overlay, and `MOVEMENT_CAMERA.md` as the spec. `DEV_ORBIT = false` by default (walking rig); `true` restores the mouse-orbit camera. Today's `Avatar` is a capsule torso, a sphere head with a visor, and a procedural bob, lean and body-turn.
-
-**Gesture locomotion (M3).** Spec in `GESTURE_UX.md`; temporal logic in `web/gestures.js`, HUD in `web/gesture-ui.js`, tunables in `GESTURE` in `web/config.js` (mutate live). Verified by unit tests only (`tests/gestures.test.mjs`); not tried with a real hand.
-- **Two modes**, so gestures never conflict. **MOVE** (the start mode): open palms are joysticks, pinch does nothing. **EDIT**: gaze selects and pinch grabs, open-palm motion does nothing. The HUD shows the mode (label, accent tint, flash and beep on change).
-- **Toggle:** both hands fist (each held 120 ms, onsets within 700 ms) arms it, then both hands open within 1.4 s fires; 0.8 s cooldown. Both hands must be visible, so a single fist never toggles. Arming zeroes the sticks. `M` is the keyboard fallback.
-- **Right hand = 3D move stick, all three axes:** push toward or pull back from the screen (palm scale) is forward/back, left/right is strafe, **raise/lower is fly up/down**. **Left hand = look:** left/right yaws, raise/lower pitches. Flying is always on and y is clamped to the floor; there is no walk mode or F toggle.
-- **Joystick feel:** rate control from a centre captured when the palm has been open 150 ms (so it never drifts); dead zones and `EXPO` 1.8 curves per axis; **axis isolation** damps the other axes by half when one is more than 2× the rest. A fist or a pinch on that hand is a clutch (that stick recentres on the next open palm); a lost hand decays velocity over 150 ms. The two sticks are independent.
 - **HUD:** two joystick widgets (look on the left, move on the right). On the move widget the dot's x is strafe, y is forward, and **dot size is height** (bigger = up). Dev overlay shows poses, palm, centres, raw/curved axes and the toggle state.
 
 **Depth effect (M6, teammate).** `web/offaxis.js`: the screen behaves like a window. The view moves with the tracked head and renders through an off-axis frustum, with a minimum eye distance, a slow neutral-depth drift, and a small gaze-lean (`GAZE_REACH_M`). Grabbing uses a head-independent hand mapping so moving your head doesn't drag a held object.

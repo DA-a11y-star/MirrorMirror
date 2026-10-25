@@ -15,10 +15,6 @@ export const TRACKER_SOURCE = params.get('tracker') ?? 'websocket';
 // 'webcam' = calibrated iris features; 'external' = tracker-provided screen gaze; 'pointer' = explicit dev fallback.
 export const GAZE_SOURCE = 'webcam';
 
-// Physical size of this laptop's screen, for the depth effect (14" MacBook Pro ~ 0.302 x 0.196 m).
-export const SCREEN_WIDTH_M = 0.302;
-export const SCREEN_HEIGHT_M = 0.196;
-
 // Depth effect: the scene shifts with your head like a window. 0 = off, 1 = natural, 2 = exaggerated.
 // Press H to recenter after settling into a different seat position.
 export const PARALLAX_STRENGTH = 1;

@@ -87,13 +87,9 @@ export class Avatar {
     this.leanSide += (THREE.MathUtils.clamp(side, -1, 1) * MAX_LEAN - this.leanSide) * k;
     this.body.rotation.set(-this.leanForward, this.bodyYaw, -this.leanSide);
 
-    // Walking bobs with each step; hovering drifts gently up and down.
-    if (state.flying) {
-      this.bob = Math.sin(this.time * 2.2) * 0.04;
-    } else {
-      this.phase += dt * moving * Math.PI * 2 * 1.6;
-      this.bob = Math.abs(Math.sin(this.phase)) * 0.04 * Math.min(moving, 1);
-    }
+    // Bob only while moving, with each step. No idle hover: a still avatar stays still.
+    this.phase += dt * moving * Math.PI * 2 * 1.6;
+    this.bob = Math.abs(Math.sin(this.phase)) * 0.04 * Math.min(moving, 1);
 
     this.root.position.set(state.pos[0], state.pos[1] + this.bob, state.pos[2]);
     this.head.rotation.set(state.pitch, state.yaw, 0);

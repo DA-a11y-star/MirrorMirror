@@ -188,7 +188,6 @@ If the laptops can't reach each other, some venue Wi-Fi isolates clients from ea
 | `VOICE_URL` | Local voice WebSocket, `ws://localhost:8767` |
 | `TRACKER_SOURCE` | `'websocket'` for the local Python tracker (default), or `'mock'`. Override with `?tracker=mock` in the page URL |
 | `GAZE_SOURCE` | `'webcam'` (calibrated iris features, default), `'external'` (tracker-provided screen coordinates), or `'pointer'` (mouse, development). Ignored in mock mode, which always uses the pointer |
-| `SCREEN_WIDTH_M`, `SCREEN_HEIGHT_M` | Physical screen size in meters, for the depth effect. Defaults assume a 14" MacBook Pro |
 | `DEV_ORBIT` | `false` (default): the walking avatar and camera rig. `true`: the old mouse-orbit camera with no walking avatar (the other user then sees an avatar derived from where your camera looks) |
 
 ### Voice-to-object generation (milestone 7)

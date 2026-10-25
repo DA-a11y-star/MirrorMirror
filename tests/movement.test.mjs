@@ -10,7 +10,7 @@ async function load(name) {
   const source = (await readFile(path, 'utf8')).replaceAll("from 'three'", `from '${three}'`);
   return import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
 }
-const { Locomotion, WALK_SPEED, FLY_SPEED, WORLD_BOUND, PITCH_LIMIT } = await load('locomotion');
+const { Locomotion, FLY_SPEED, WORLD_BOUND, PITCH_LIMIT } = await load('locomotion');
 const { CameraRig } = await load('camera');
 const { Avatar } = await load('avatar');
 
@@ -258,7 +258,7 @@ test('avatar animation: bob, lean into motion, body turns toward movement, head 
   const hover = { ...idle, flying: true, pos: [0, 2, 0] };
   const ys = [];
   for (let i = 0; i < 180; i++) { avatar.update(hover, 1 / 60); ys.push(avatar.root.position.y); }
-  assert.ok(Math.max(...ys) - Math.min(...ys) > 0.04, 'hover bobs');
+  assert.ok(Math.max(...ys) - Math.min(...ys) < 1e-9, 'a still avatar does not bob, even while flying');
   avatar.setHeadVisible(false);
   assert.equal(avatar.head.visible, false);
 });
