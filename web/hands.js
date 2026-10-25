@@ -3,9 +3,9 @@ import * as THREE from 'three';
 // Tracker landmarks are webcam-space meters: x to the user's right (the image is mirrored), y down, and z away
 // from the webcam toward the user. Hands are drawn in front of the viewing camera, as if the screen were a window
 // the user reaches into: pushing a hand toward the screen pushes it deeper into the scene.
-const HAND_GAIN = 1.2; // lateral scale, webcam meters -> view meters
-const HAND_DROP = 0.08; // lowers the hands a little so they sit below the line of sight
-const HAND_DEPTH = 0.55; // view distance of a hand held at REF_Z from the webcam
+const HAND_GAIN = 0.9; // lateral scale, webcam meters -> view meters (smaller = smaller hands and less reach)
+const HAND_DROP = 0.06; // lowers the hands a little so they sit below the line of sight
+const HAND_DEPTH = 0.85; // view distance of a hand held at REF_Z from the webcam (larger = pushed forward, into the scene)
 const REF_Z = 0.45;
 const DEPTH_GAIN = 1.5;
 
