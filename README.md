@@ -54,6 +54,8 @@ web/
   remote-avatar.js     The other user: their walking body, head turn, hands, and what they are looking at
   mock.js              Camera-free tracker for development using the same protocol
   mouse-tracker.js     Mouse-as-hand fallback (`?tracker=mouse`): cursor is gaze and hand, left button pinches
+  sets.js, scenery.js  Set registry (model, scale, night environment) and the helpers that place a model as non-interactive scenery
+  assets/              Set models (`.glb`) and `CREDITS.md`. Add third-party models here and credit them
   objects.js           Primitive assembly rendering, free-space placement, undo and disposal
   object-protocol.js   Validated render-only assembly format for relay operations and scene snapshots
   voice.js             Browser recording, local WAV conversion and voice WebSocket client
@@ -97,6 +99,8 @@ From the project root, use two terminals:
 # Terminal 2: browser files
 .venv/bin/python -m http.server 8000 --directory web
 ```
+
+**Sets:** `http://localhost:8000/?set=cyberpunk` shows the neon city model between the two users (add `&user=B` on the other laptop; both must use the same `set`, and both laptops need the model files, which are in the repo). The default is the plain workshop. The model's credit is in `web/assets/CREDITS.md`.
 
 Open [localhost:8000](http://localhost:8000). `TRACKER_SOURCE = 'websocket'` is the default. The HUD changes from `connecting` / `waiting for camera` to `live`, with tracker Hz. Raise your hands to see the skeletons; thumb-index pinches produce `pinch_start` / `pinch_end` in the HUD.
 

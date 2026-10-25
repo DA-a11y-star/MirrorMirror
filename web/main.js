@@ -1,13 +1,16 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { DEV_ORBIT, GAZE_SOURCE, GESTURE, HOST_ID, PARALLAX_STRENGTH, RELAY_URL, TRACKER_SOURCE, TRACKER_URL, USER_ID, VOICE_URL } from './config.js';
+import { DEV_ORBIT, GAZE_SOURCE, GESTURE, HOST_ID, PARALLAX_STRENGTH, RELAY_URL, SET_ID, TRACKER_SOURCE, TRACKER_URL, USER_ID, VOICE_URL } from './config.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RemoteAvatar } from './remote-avatar.js';
 import { OffAxis } from './offaxis.js';
 import { Hands } from './hands.js';
 import { Net } from './net.js';
 import { startMockTracker } from './mock.js';
 import { startMouseTracker } from './mouse-tracker.js';
-import { createRenderer, createScene, SPAWNS } from './scene.js';
+import { applyEnvironment, createRenderer, createScene, SPAWNS } from './scene.js';
+import { SETS, loadSetModel } from './sets.js';
+import { sceneryStats } from './scenery.js';
 import { startTracker } from './tracker.js';
 import { GazeInput } from './gaze.js';
 import { GazeUI } from './gaze-ui.js';
@@ -26,7 +29,7 @@ import { GestureUI } from './gesture-ui.js';
 const STATE_HZ = 30; // how often this laptop sends its state to the other
 
 const renderer = createRenderer();
-const { scene, camera, blocks } = createScene(USER_ID);
+const { scene, camera, blocks, look } = createScene(USER_ID);
 const hands = new Hands(scene);
 // `camera` is the stable base view (orbit/avatar). `view` is what the viewer's eye actually sees: the same view
 // moved with their head and rendered through an off-axis frustum.
@@ -41,6 +44,18 @@ const peers = new Map(); // user id -> RemoteAvatar
 const heldIds = () => new Set([...interaction.grabs.values()].map(grab => grab.mesh.userData.id));
 const voiceUI = new VoiceUI(VOICE_URL, objects);
 window.app = { renderer, scene, camera, view, hands, blocks, interaction, gaze, gazeUI, offAxis, sync, peers, objects, voiceUI }; // dev console
+
+// The set's look and model. The model is scenery: it is added to the scene, not to `blocks`, so it can't be targeted.
+const set = SETS[SET_ID];
+if (!set) throw new Error(`Unknown set "${SET_ID}"; known: ${Object.keys(SETS).join(', ')}`);
+applyEnvironment(scene, look, set.environment);
+if (set.workspace) blocks.position.set(set.workspace[0], 0, set.workspace[1]);
+window.app.set = set;
+window.app.look = look; // dev console: tweak lights and floor live
+window.app.setReady = loadSetModel(set, scene, new GLTFLoader()).then(root => {
+  window.app.scenery = root;
+  if (root) console.info(`[set] ${set.name}: ${JSON.stringify(sceneryStats(root))}`);
+}).catch(error => console.error(`[set] could not load ${set.name}: ${error.message}`));
 
 // Avatar, camera rig and input. Keys and mouse are read only in input.js; everything below consumes intents.
 const input = new Input(renderer.domElement, { mouseFallback: TRACKER_SOURCE === 'mouse' });
@@ -195,7 +210,7 @@ renderer.setAnimationLoop(() => {
   gazeUI.update(now, interaction.target?.userData.id, [...interaction.grabs.values()].map(g => g.mesh.userData.id).join(', '));
   gestureUI.update();
   dev.update({
-    fps: fpsShown, frameMs, rig, locomotion, intents, camera, view, gestures,
+    fps: fpsShown, frameMs, rig, locomotion, intents, camera, view, gestures, renderInfo: renderer.info.render,
     tracker, gaze: gaze.get(now), gazeTargetId: interaction.target?.userData.id, gazeTargetObject: interaction.target, now,
   });
   renderer.render(scene, view);

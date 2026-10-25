@@ -13,6 +13,8 @@ export const VOICE_URL = 'ws://localhost:8767';
 // 'websocket' = local Python tracker; 'mock' = animated hands for camera-free development; 'mouse' = the cursor is
 // gaze and hand, left button pinches, right-click mouse-looks (a fallback for a dead camera).
 export const TRACKER_SOURCE = params.get('tracker') ?? 'websocket';
+// Which world to show: 'workshop' (the plain room, default) or 'cyberpunk' (the model city). ?set=cyberpunk
+export const SET_ID = params.get('set') ?? 'workshop';
 // 'webcam' = calibrated iris features; 'external' = tracker-provided screen gaze; 'pointer' = explicit dev fallback.
 export const GAZE_SOURCE = 'webcam';
 

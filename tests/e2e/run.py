@@ -276,6 +276,50 @@ async def main():
         assert gap3 < .02, gap3
         print(f'PASS: with the mouse alone, a click-drag moved b3 {moved3:.2f} m, A saw it, and the drop landed within {gap3*1000:.1f} mm')
 
+        # A set with a model: the city loads as scenery. It must be impossible to target, grab or move.
+        await m.close()
+        # The host's mock hands keep pinching in EDIT mode and would keep nudging blocks; stop them so only C moves anything.
+        await a.js("app.gestures.mode = 'MOVE'; app.interaction.releaseAll(); 0")
+        c = Page('C', base.replace('tracker=mock', 'tracker=mouse') + '&user=B&set=cyberpunk')
+        extra.append(c)
+        await c.start()
+        await c.wait('window.app?.net?.status === "connected"', what='city page connects')
+        await c.js('app.renderer.setPixelRatio(1); app.renderer.shadowMap.enabled = false; 0')
+        await c.js('app.setReady.then(() => 0)')
+        stats = await c.js('(async () => { const m = await import("/scenery.js"); return m.sceneryStats(app.scenery); })()')
+        assert stats == dict(triangles=64171, meshes=30, materials=30), stats
+        assert await c.js('app.scenery.parent === app.scene && !app.blocks.children.some(o => o.userData.scenery)'), 'scenery must not be in blocks'
+        assert await c.js("['b1','b2','b3','b4','b5'].every(id => app.blocks.children.some(o => o.userData.id === id))"), 'starter blocks exist'
+        assert await c.js('app.blocks.position.x') == 2, 'the workspace sits beside the city'
+        assert await c.js('app.look.grid.visible') is False
+        # A page that just joined is still easing its blocks to the host's poses; let that finish first.
+        poses = 'JSON.stringify(app.blocks.children.map(o => o.position.toArray().map(v => Math.round(v * 1000))))'
+        before, still = await c.js(poses), 0
+        for _ in range(60):
+            await asyncio.sleep(.3)
+            now_poses = await c.js(poses)
+            still = still + 1 if now_poses == before else 0
+            before = now_poses
+            if still >= 5: break  # unchanged for 1.5 s
+        else:
+            raise AssertionError('blocks never settled after joining')
+        city = await c.js('''(() => { const box = new app.camera.position.constructor(); const p = box.set(0, .4, 0).project(app.view);
+          return [(p.x + 1) / 2 * innerWidth, (1 - p.y) / 2 * innerHeight]; })()''')
+        await c.call('Input.dispatchMouseEvent', dict(type='mouseMoved', x=city[0], y=city[1]))
+        await asyncio.sleep(.8)
+        assert await c.js('app.interaction.target') is None, 'looking at the city must not target anything'
+        await c.call('Input.dispatchMouseEvent', dict(type='mousePressed', x=city[0], y=city[1], button='left', buttons=1, clickCount=1))
+        for i in range(6):
+            await c.call('Input.dispatchMouseEvent', dict(type='mouseMoved', x=city[0] + i * 15, y=city[1], button='left', buttons=1))
+            await asyncio.sleep(.1)
+        assert await c.js('app.interaction.grabs.size') == 0, 'pinching on the city must not grab it'
+        await c.call('Input.dispatchMouseEvent', dict(type='mouseReleased', x=city[0] + 75, y=city[1], button='left', buttons=0, clickCount=1))
+        after = await c.js(poses)
+        assert after == before, f'no block moved either: {before} -> {after}; holders A={await a.js("JSON.stringify([...app.sync.holders])")} C={await c.js("JSON.stringify([...app.sync.holders])")}'
+        moved = await c.js('app.scenery.getWorldPosition(new app.camera.position.constructor()).toArray()')
+        assert max(abs(v) for v in moved) < 5, moved
+        print(f"PASS: the cyberpunk city loads as scenery ({stats['triangles']} triangles, {stats['meshes']} meshes) and cannot be targeted or grabbed")
+
         for p in (a, b, *extra):
             assert not p.errors, (p.name, p.errors)
         print('PASS: no JavaScript exceptions on either page')

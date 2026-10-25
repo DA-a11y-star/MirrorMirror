@@ -74,6 +74,7 @@ export class Dev {
     const toggled = Object.entries(intents.toggles).filter(([, on]) => on).map(([name]) => name).join(',') || '-';
     this.panel.textContent = [
       `fps ${info.fps}   frame ${f(info.frameMs, 1)} ms`,
+      `render  ${info.renderInfo?.calls ?? '-'} draw calls · ${info.renderInfo ? Math.round(info.renderInfo.triangles / 1000) + 'k' : '-'} triangles`,
       `mode  ${info.gestures?.mode ?? '-'} · ${rig.mode}`,
       `avatar  ${vec(loco.pos)}  yaw ${deg(loco.yaw)}  pitch ${deg(loco.pitch)}`,
       `camera  ${vec(camera.position)}`,
