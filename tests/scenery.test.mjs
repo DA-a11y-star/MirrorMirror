@@ -12,7 +12,7 @@ async function load(name, imports = {}) {
   return { module: await import(dataUrl(source)), url: dataUrl(source) };
 }
 const scenery = await load('scenery');
-const { fitScenery, prepareScenery, sceneryStats, disposeScenery } = scenery.module;
+const { fitScenery, prepareScenery, sceneryStats } = scenery.module;
 const { SETS } = (await load('sets', { scenery: scenery.url })).module;
 
 // A lopsided model: a tall box off to one side and a low slab, offset from the origin and sunk below the ground.
@@ -38,6 +38,29 @@ test('fitScenery scales the model, stands it on y = 0 and centres its footprint'
   assert.ok(Math.abs(new THREE.Box3().setFromObject(root).min.y) < 1e-9, 'fitting twice gives the same result');
 });
 
+test('fitScenery floor: the model\'s own walkable height lands on y = 0, even with parts hanging below it', () => {
+  const root = model(); // the slab's top is at y = -0.5, but a 6 m tower and the slab's bottom reach lower than that
+  const flat = new THREE.Box3().setFromObject(root);
+  const box = fitScenery(root, { scale: 2, center: [0, 0], floor: -0.5 });
+  const top = box.max.y - (flat.max.y + 0.5) * 2; // where the slab's top surface (y = -0.5) ended up
+  assert.ok(Math.abs(top) < 1e-9, `the floor surface is at ${top}`);
+  assert.ok(box.min.y < -0.5, 'the part below the floor stays below it instead of being lifted onto it');
+  const plain = fitScenery(root, { scale: 2, center: [0, 0] });
+  assert.ok(Math.abs(plain.min.y) < 1e-9, 'without a floor the lowest point still stands on y = 0');
+  assert.ok(Math.abs(box.min.y - plain.min.y) > 0.5, 'and the two placements differ');
+});
+
+test('the Japanese garden is placed on its lawn, at real size, with its measured open spot on the origin', async () => {
+  const garden = SETS['japanese-garden'];
+  assert.equal(garden.scale, 1);
+  assert.ok(garden.floor < -19 && garden.floor > -21, `floor ${garden.floor}`);
+  assert.deepEqual(garden.center, [7.75, 0.8]);
+  assert.equal(garden.shadows.castShadow, true);
+  const preset = JSON.parse(await readFile(new URL('../web/presets/japanese-garden/preset.json', import.meta.url), 'utf8'));
+  assert.equal(preset.id, 'japanese-garden', 'the landing card and the model set share an id, which is how Play finds the model');
+  assert.deepEqual(preset.objects, {}, 'the world comes from the model, not from invented props');
+});
+
 test('prepareScenery marks and freezes the model; it receives shadows but casts none unless asked', () => {
   const root = model();
   fitScenery(root, { scale: 2, center: [0, 0] });
@@ -54,20 +77,8 @@ test('prepareScenery marks and freezes the model; it receives shadows but casts 
   root.traverse(node => { if (node.isMesh) assert.equal(node.castShadow, true); });
 });
 
-test('sceneryStats counts triangles, meshes and distinct materials; disposeScenery frees them and detaches', () => {
-  const root = model();
-  assert.deepEqual(sceneryStats(root), { triangles: 24, meshes: 2, materials: 2 });
-  const scene = new THREE.Scene();
-  scene.add(root);
-  const disposed = [];
-  root.traverse(node => {
-    if (!node.isMesh) return;
-    node.geometry.addEventListener('dispose', () => disposed.push('geometry'));
-    node.material.addEventListener('dispose', () => disposed.push('material'));
-  });
-  disposeScenery(root);
-  assert.equal(root.parent, null);
-  assert.deepEqual(disposed.sort(), ['geometry', 'geometry', 'material', 'material']);
+test('sceneryStats counts triangles, meshes and distinct materials', () => {
+  assert.deepEqual(sceneryStats(model()), { triangles: 24, meshes: 2, materials: 2 });
 });
 
 test('every set with a model points at a valid .glb in web/, with a credit, a sane scale and a clear workspace', async () => {

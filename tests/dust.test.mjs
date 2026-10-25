@@ -1,15 +1,8 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import * as THREE from '../web/vendor/three.module.js';
+import { load } from './load.mjs';
 
-async function load(name, imports = {}) {
-  const path = new URL(`../web/${name}.js`, import.meta.url);
-  const three = new URL('../web/vendor/three.module.js', import.meta.url).href;
-  let source = (await readFile(path, 'utf8')).replaceAll("from 'three'", `from '${three}'`);
-  for (const [file, url] of Object.entries(imports)) source = source.replaceAll(`from './${file}.js'`, `from '${url}'`);
-  return import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
-}
 const { DustCloud } = await load('dust');
 const protocolUrl = new URL('../web/object-protocol.js', import.meta.url).href;
 const { Objects } = await load('objects', { 'object-protocol': protocolUrl });

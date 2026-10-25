@@ -3,7 +3,7 @@ import * as THREE from 'three';
 // Avatar pose + mode -> the base camera pose. The off-axis depth effect (offaxis.js) composes on top of this base
 // camera, so nothing here knows about head tracking.
 const EYE_HEIGHT = 1.4;
-const HEAD_HEIGHT = 1.3; // third-person orbit centre, above the avatar's feet
+const HEAD_HEIGHT = 0.6; // third-person orbit centre, above the avatar's feet (the avatar is short and round)
 const TP_MIN = 1.5;
 const TP_MAX = 8;
 const TP_DEFAULT = 4;

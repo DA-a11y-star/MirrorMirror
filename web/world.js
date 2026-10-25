@@ -2,14 +2,12 @@ import * as THREE from 'three';
 import { loadPreset } from './presets.js';
 import { buildSetScene } from './set-scene.js';
 import { random } from './set-layout.js';
+import { floorRects, makeFloorAt } from './floor.js';
 
 // The workspace's world: the preset chosen on the landing page, built with the same builder as the landing page's
 // background (sky dome, fog, ground, sun, props) and added to the workspace scene as scenery. Scenery is never put in
 // `blocks`: Interaction raycasts everything in there, so scenery would cost frame time and become grabbable.
 const FAR = 240; // the sky dome is 120 m out, farther than the plain room's camera could see
-
-// Where the blocks stand in each world (height of whatever the floor is). The workshop's deck is 0.3 m thick.
-const BLOCKS_Y = { workshop: 0.3 };
 
 // The same seed on both laptops, so both users see the same trees, cars and benches.
 export function worldSeed(id) {
@@ -41,7 +39,8 @@ export async function loadWorld(id, { scene, look, camera, blocks }) {
   for (const light of [look.hemisphere, look.sun, look.fill]) light.intensity = 0; // the preset lights the world now
   camera.far = FAR;
   camera.updateProjectionMatrix();
-  const blocksY = BLOCKS_Y[id] ?? 0;
+  const floorAt = makeFloorAt(floorRects(preset, built.layout)); // decks and paths you can stand on
+  const blocksY = floorAt(blocks.position.x, blocks.position.z);
   blocks.position.y = blocksY;
-  return { preset, group, blocksY, update: seconds => built.update(seconds) };
+  return { preset, group, blocksY, floorAt, update: seconds => built.update(seconds) };
 }

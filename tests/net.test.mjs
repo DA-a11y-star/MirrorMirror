@@ -131,3 +131,9 @@ test('stop closes the link for good', t => {
   assert.equal(s.sockets.length, 1);
   assert.equal(s.net.send({ type: 'state' }), false);
 });
+
+test('a hand may carry `rest` (MOVE mode, stick not engaged): a boolean or nothing; anything else is rejected', () => {
+  const withRest = rest => state('B', 1, { hands: [{ side: 'right', pinch: 0, lm: lm(), ...(rest === undefined ? {} : { rest }) }] });
+  for (const ok of [undefined, true, false, null]) assert.equal(validState(withRest(ok)), true, String(ok));
+  for (const bad of ['yes', 1, [], {}]) assert.equal(validState(withRest(bad)), false, JSON.stringify(bad));
+});

@@ -1,13 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
+import { load } from './load.mjs';
 
-async function load(name) {
-  const path = new URL(`../web/${name}.js`, import.meta.url);
-  const three = new URL('../web/vendor/three.module.js', import.meta.url).href;
-  const source = (await readFile(path, 'utf8')).replaceAll("from 'three'", `from '${three}'`);
-  return import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
-}
 
 const { Gestures, curve, isolateAxes } = await load('gestures');
 
@@ -246,35 +240,56 @@ test('EDIT mode: one held fist starts voice listening once; releasing re-arms it
   assert.equal(g.apply(fresh()).toggles.voice, true);
   g.setFrame([hand('right', 'fist')], g.cfg.VOICE_FIST_MS + 600);
   assert.equal(g.apply(fresh()).toggles.voice, undefined, 'once per fist');
-  g.setFrame([open], 3000);
-  g.setFrame([hand('left', 'fist')], 3100);
-  g.setFrame([hand('left', 'fist')], 3100 + g.cfg.VOICE_FIST_MS + 10);
+  const later = g.cfg.VOICE_FIST_MS + 5000; // well after the cooldown
+  g.setFrame([open], later);
+  g.setFrame([hand('left', 'fist')], later + 100);
+  g.setFrame([hand('left', 'fist')], later + 100 + g.cfg.VOICE_FIST_MS + 10);
   assert.equal(g.apply(fresh()).toggles.voice, true, 'the other hand works too, after releasing');
 });
 
 test('voice trigger: not in MOVE, not with two fists, not while a block is held, not while the toggle is armed', () => {
   const fresh = () => ({ move: { forward: 0, strafe: 0, vertical: 0 }, turn: 0, pitch: 0, toggles: {} });
+  const HOLD = new Gestures().cfg.VOICE_FIST_MS;
   const hold = (g, hands, to) => { for (let t = 0; t <= to; t += 50) g.setFrame(hands, t); };
   const move = new Gestures();
-  hold(move, [hand('right', 'fist')], 1500);
+  hold(move, [hand('right', 'fist')], HOLD + 1500);
   assert.equal(move.apply(fresh()).toggles.voice, undefined, 'MOVE mode never listens');
 
   const both = new Gestures();
   both.toggleMode();
-  hold(both, [hand('left', 'fist'), hand('right', 'fist')], 1500);
+  hold(both, [hand('left', 'fist'), hand('right', 'fist')], HOLD + 1500);
   assert.equal(both.apply(fresh()).toggles.voice, undefined, 'double fist is the mode toggle, not voice');
 
   const holding = new Gestures();
   holding.toggleMode();
   holding.suppressVoice = true;
-  hold(holding, [hand('right', 'fist')], 1500);
+  hold(holding, [hand('right', 'fist')], HOLD + 1500);
   assert.equal(holding.apply(fresh()).toggles.voice, undefined, 'a gripping hand must not start listening');
 
   const cooldown = new Gestures();
   cooldown.toggleMode();
-  hold(cooldown, [hand('right', 'fist')], 700);
+  hold(cooldown, [hand('right', 'fist')], HOLD + 200);
   assert.equal(cooldown.apply(fresh()).toggles.voice, true);
-  hold(cooldown, [hand('right', 'open', { scale: 0.12 })], 800);
-  hold(cooldown, [hand('right', 'fist')], 1100);
+  hold(cooldown, [hand('right', 'open', { scale: 0.12 })], HOLD + 400);
+  hold(cooldown, [hand('right', 'fist')], HOLD + 500);
   assert.equal(cooldown.apply(fresh()).toggles.voice, undefined, 'cooldown stops a quick second trigger');
+});
+
+test('restFor: in MOVE mode a hand rests until its stick engages, and again after a fist; never in EDIT mode', () => {
+  const g = new Gestures();
+  assert.equal(g.restFor('right'), true, 'nothing engaged yet');
+  g.setFrame([hand('right', 'open')], 0);
+  g.setFrame([hand('right', 'open')], 160);
+  assert.equal(g.move.engaged, true);
+  assert.equal(g.restFor('right'), false, 'engaged: the ball follows the hand');
+  assert.equal(g.restFor('left'), true, 'the other stick is separate');
+  g.setFrame([hand('right', 'fist')], 200);
+  assert.equal(g.restFor('right'), true, 'a fist clutches: the ball goes back to rest');
+  g.setFrame([hand('right', 'open')], 220);
+  assert.equal(g.restFor('right'), true, 'and stays there until the stick recentres');
+  g.setFrame([hand('right', 'open')], 400);
+  assert.equal(g.restFor('right'), false);
+  g.toggleMode();
+  assert.equal(g.restFor('right'), false, 'EDIT mode: the ball just follows the hand');
+  assert.equal(g.restFor('left'), false);
 });

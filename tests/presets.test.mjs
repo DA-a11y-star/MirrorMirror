@@ -33,6 +33,11 @@ test('the shipped registry loads four presets plus the UT Austin background, all
   assert.equal(background?.id, 'ut-austin');
   for (const preset of [...presets, background]) {
     assert.ok(preset.name && preset.description, preset.id);
+    // A preset with no objects of its own is a model set (sets.js): its world is a GLB, tested in scenery.test.mjs.
+    if (!Object.keys(preset.objects).length) {
+      assert.deepEqual([preset.place.length, preset.scatter.length], [0, 0], `${preset.id} has nothing to place`);
+      continue;
+    }
     assert.ok(preset.place.some(p => p.object), `${preset.id} has a landmark`);
     assert.ok(preset.scatter.length && preset.scatter.every(s => s.count[1] > 0), `${preset.id} scatters random props`);
     const scattered = new Set(preset.scatter.flatMap(s => s.objects));
@@ -87,7 +92,9 @@ test('an imported file is held to the format: header, environment, parts and sca
   rejects(minimal({ tint: 'red' }), /"tint"/);
   rejects(minimal({ environment: { ...minimal().environment, sky: ['#112233'] } }), /environment.sky/);
   rejects(minimal({ environment: { ...minimal().environment, fog: ['#445566', 40, 5] } }), /fog\[2\]/);
-  rejects(minimal({ objects: {} }), /at least one object/);
+  // A look-only preset is valid (a model set supplies the world), but it cannot reference objects it doesn't have.
+  assert.deepEqual(validatePreset(minimal({ objects: {}, scatter: [] }), BASE).objects, {});
+  rejects(minimal({ objects: {} }), /not one of this preset's objects/);
   rejects(minimal({ objects: { Crate: [BOX] } }), /object name/);
   rejects(minimal({ objects: { crate: [{ ...BOX, shape: 'torus' }] } }), /shape/);
   rejects(minimal({ objects: { crate: [{ ...BOX, size: [1, 0, 1] }] } }), /size\[1\]/);

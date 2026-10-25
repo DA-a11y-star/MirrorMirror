@@ -1,15 +1,8 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import * as THREE from '../web/vendor/three.module.js';
+import { load } from './load.mjs';
 
-// Node doesn't consume the browser import map; resolve the same vendored module for these headless tests.
-async function load(name) {
-  const path = new URL(`../web/${name}.js`, import.meta.url);
-  const three = new URL('../web/vendor/three.module.js', import.meta.url).href;
-  const source = (await readFile(path, 'utf8')).replaceAll("from 'three'", `from '${three}'`);
-  return import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
-}
 const { Interaction } = await load('interaction');
 const { Hands } = await load('hands');
 

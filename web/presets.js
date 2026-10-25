@@ -176,7 +176,6 @@ export function validatePreset(raw, baseUrl) {
 
   if (!isObject(raw.objects)) fail('"objects" must map names to lists of parts');
   const names = Object.keys(raw.objects);
-  if (!names.length) fail('"objects" needs at least one object');
   if (names.length > LIMITS.objects) fail(`a preset can define at most ${LIMITS.objects} objects`);
   const objects = {};
   for (const name of names) {

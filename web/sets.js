@@ -21,6 +21,24 @@ export const SETS = {
     },
     credit: '"Cyberpunk City - #1" by born2012 (https://sketchfab.com/born2012), CC BY 4.0',
   },
+  'japanese-garden': {
+    name: 'Japanese Garden',
+    model: 'assets/japanese-garden/kyles-japanese_garden.glb',
+    // A 29 m square plot at real-world size (the house is about 12 m wide), hung 20 m below the origin with rocks that
+    // reach 1.4 m below the lawn. `floor` is the lawn's height in the model (-19.95 m, plus 1 cm so the lawn sits just
+    // above the room floor instead of fighting it). The plot is dense, so `center` puts the open lawn west of the pond
+    // (3 m of clear ground, measured by raycasting the model) on the origin, where the blocks and both spawns are.
+    scale: 1,
+    center: [7.75, 0.8],
+    floor: -19.96,
+    shadows: { castShadow: true },
+    // A bright, soft morning: the model's pastel flat colors carry it.
+    environment: {
+      background: 0xa9cfee, fog: [0xdcebf3, 35, 120], hemisphere: [0xe4f0ff, 0x86b585, 0.9],
+      sun: [0xfff1d8, 1.1], floor: 0x86cc8a, grid: false,
+    },
+    credit: '"KyleS-Japanese Garden" by ksayavanh2023 (https://sketchfab.com/ksayavanh2023), CC BY 4.0',
+  },
 };
 
 // Loads the set's model with the given GLTFLoader, adds it to `scene` as non-interactive scenery and resolves with
@@ -30,7 +48,7 @@ export async function loadSetModel(set, scene, loader) {
   const gltf = await loader.loadAsync(set.model);
   const root = gltf.scene;
   root.name = 'scenery';
-  fitScenery(root, { scale: set.scale, center: set.center });
+  fitScenery(root, { scale: set.scale, center: set.center, floor: set.floor });
   prepareScenery(root, set.shadows);
   scene.add(root);
   return root;

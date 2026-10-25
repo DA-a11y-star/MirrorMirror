@@ -106,6 +106,10 @@ const input = new Input(renderer.domElement, { mouseFallback: TRACKER_SOURCE ===
 // Each user spawns at their own end of the blocks, a few steps back, looking down at them.
 const locomotion = new Locomotion({ spawn: SPAWNS[USER_ID] ?? SPAWNS.A });
 const avatar = new Avatar(scene);
+// Floors are the world's: decks and paths you stand on (0 until a preset world has loaded).
+const floorAt = (x, z) => world?.floorAt(x, z) ?? 0;
+locomotion.floorAt = floorAt;
+avatar.floorAt = floorAt;
 const rig = new CameraRig(camera);
 const gestures = new Gestures(GESTURE);
 // The mouse is the pinch and there are no palms to steer with, so start where pinch grabs (M still toggles).
@@ -157,10 +161,17 @@ if (TRACKER_SOURCE === 'mock') {
 } else {
   throw new Error(`Unknown TRACKER_SOURCE: ${TRACKER_SOURCE}`);
 }
+function makePeer(user) {
+  const body = new Avatar(scene);
+  body.floorAt = floorAt;
+  const skeleton = new Hands(scene);
+  skeleton.joints.visible = skeleton.bones.visible = false; // a peer's hands are their avatar's gloves, not bones
+  return new RemoteAvatar(user, body, skeleton, EYE_HEIGHT);
+}
 function onNetMessage(msg) {
   const now = performance.now();
   if (msg.type === 'state') {
-    if (!peers.has(msg.user)) peers.set(msg.user, new RemoteAvatar(msg.user, new Avatar(scene), new Hands(scene), EYE_HEIGHT));
+    if (!peers.has(msg.user)) peers.set(msg.user, makePeer(msg.user));
     peers.get(msg.user).setState(msg, now);
     for (const id of sync.applyState(msg, now, heldIds())) interaction.drop(id);
   } else if (msg.type === 'scene') {
@@ -195,7 +206,7 @@ function buildState(held) {
     avatar: avatarSnapshot(),
     head: frame?.head ? { quat: frame.head.quat } : null,
     target: interaction.target?.userData.id ?? null,
-    hands: (frame?.hands ?? []).map(({ side, pinch, lm }) => ({ side, pinch, lm: lm.map(p => p.map(round)) })),
+    hands: (frame?.hands ?? []).map(({ side, pinch, lm }) => ({ side, pinch, lm: lm.map(p => p.map(round)), ...(gestures.restFor(side) ? { rest: true } : {}) })),
     held: sync.snapshotHeld(held),
   };
 }
@@ -248,6 +259,7 @@ renderer.setAnimationLoop(() => {
   } else {
     locomotion.update(intents, dt, !rig.freeActive && !intents.toggles.freeCam);
     const state = locomotion.state();
+    avatar.setHands(tracker.frame?.hands?.map(h => ({ ...h, rest: gestures.restFor(h.side) }))); // the glove hands copy yours (visible in third person and to the other user)
     avatar.update(state, dt);
     rig.update(intents, state, avatar.bob, dt);
     avatar.setVisible(!rig.hideAvatar);

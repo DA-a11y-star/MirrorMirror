@@ -5,9 +5,9 @@ import {
 } from '../web/gait.js';
 
 test('phase advances with distance, not time, and wraps', () => {
-  assert.ok(Math.abs(advancePhase(0, 2, 0.5) - 1 / STRIDE_M) < 1e-12);
+  assert.ok(Math.abs(advancePhase(0, 1, 0.5) - 0.5 / STRIDE_M) < 1e-12);
   assert.equal(advancePhase(0.5, 0, 10), 0.5, 'standing still never advances the stride');
-  assert.ok(advancePhase(0.99, 1, 0.5) < 0.5, 'wraps past 1');
+  assert.ok(advancePhase(0.99, 0.5, 0.5) < 0.5, 'wraps past 1');
 });
 
 test('a planted foot is stationary in the world: it slides back exactly as fast as the body moves', () => {

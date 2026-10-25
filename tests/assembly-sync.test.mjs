@@ -1,18 +1,10 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import * as THREE from '../web/vendor/three.module.js';
 import { validOp, validScene } from '../web/net.js';
 import { validAssembly } from '../web/object-protocol.js';
+import { load } from './load.mjs';
 
-async function load(name) {
-  const three = new URL('../web/vendor/three.module.js', import.meta.url).href;
-  const protocol = new URL('../web/object-protocol.js', import.meta.url).href;
-  const source = (await readFile(new URL(`../web/${name}.js`, import.meta.url), 'utf8'))
-    .replaceAll("from 'three'", `from '${three}'`)
-    .replaceAll("from './object-protocol.js'", `from '${protocol}'`);
-  return import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
-}
 const { Objects } = await load('objects');
 const { Interaction } = await load('interaction');
 const { SceneSync } = await load('sync');

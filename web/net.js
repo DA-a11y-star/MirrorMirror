@@ -17,6 +17,7 @@ export function validState(msg) {
   for (const hand of msg.hands) {
     if (!hand || !['left', 'right'].includes(hand.side) || !Number.isFinite(hand.pinch) || hand.pinch < 0 || hand.pinch > 1) return false;
     if (!Array.isArray(hand.lm) || hand.lm.length !== 21 || !hand.lm.every(p => finite(p, 3))) return false;
+    if (hand.rest != null && typeof hand.rest !== 'boolean') return false;
   }
   return Array.isArray(msg.held) && msg.held.length <= 16 && msg.held.every(pose);
 }

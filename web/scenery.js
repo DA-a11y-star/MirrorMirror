@@ -5,13 +5,15 @@ import * as THREE from 'three';
 // frame, so a detailed city in there would cost frame time for nothing, and every mesh would become grabbable.
 
 // Scales `root`, stands it on y = 0 and centres its footprint on `center` ([x, z]). Returns the final bounds.
-export function fitScenery(root, { scale = 1, center = [0, 0] } = {}) {
+// `floor` is the model's own walkable height (before scaling), for a model whose lowest point is not its floor: a
+// garden whose rocks hang below its lawn would otherwise be lifted off the ground by the depth of the rocks.
+export function fitScenery(root, { scale = 1, center = [0, 0], floor = null } = {}) {
   root.position.set(0, 0, 0);
   root.scale.setScalar(scale);
   root.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(root);
   const middle = box.getCenter(new THREE.Vector3());
-  root.position.set(center[0] - middle.x, -box.min.y, center[1] - middle.z);
+  root.position.set(center[0] - middle.x, floor === null ? -box.min.y : -floor * scale, center[1] - middle.z);
   root.updateMatrixWorld(true);
   return new THREE.Box3().setFromObject(root);
 }
@@ -40,16 +42,4 @@ export function sceneryStats(root) {
     triangles += (node.geometry.index?.count ?? node.geometry.attributes.position.count) / 3;
   });
   return { triangles: Math.round(triangles), meshes, materials: materials.size };
-}
-
-export function disposeScenery(root) {
-  root.traverse(node => {
-    if (!node.isMesh) return;
-    node.geometry.dispose();
-    for (const material of [].concat(node.material)) {
-      for (const value of Object.values(material)) if (value?.isTexture) value.dispose();
-      material.dispose();
-    }
-  });
-  root.removeFromParent();
 }
