@@ -42,7 +42,7 @@ tests/     Node (*.test.mjs) and Python (test_*.py); tests/e2e/run.py is the two
 README.md, MOVEMENT_CAMERA.md (the movement/camera task spec), GESTURE_UX.md (the gesture task spec)
 hand_landmarker.task, face_landmarker.task (MediaPipe models, committed so venue Wi-Fi isn't needed)
 ```
-Planned new files are listed under Planned work (`web/sets/`, `web/library.js`, `web/gait.js`, ...).
+Planned new files are listed under Planned work (`web/library.js`, `web/gait.js`, ...). `sets.js` and `scenery.js` exist; later sets may need a `web/sets/` folder.
 
 ## Running
 ```
@@ -120,6 +120,7 @@ Verification legend: **unit** = Node/Python tests, **sim** = scripted simulation
 | 5 | Relay and second user | Implemented (unit + e2e). Not tried on two real laptops or with a real head turn |
 | 6 | Depth effect | Implemented by a teammate (unit); composes with the movement camera; untuned on a real person |
 | 7 | Voice-to-object | Implemented and shared through the relay (unit, live API smoke check by its author); real-user rehearsal pending |
+| B1 | Sets, first slice | Cyberpunk city as scenery via `?set=cyberpunk` (unit + e2e); no in-app switching, host sync or epoch; not judged on a real display |
 | 8 | Polish | 8a partly done (see below), 8b and 8c not started |
 
 ### Implemented, in detail
@@ -144,13 +145,15 @@ Verification legend: **unit** = Node/Python tests, **sim** = scripted simulation
 
 **Voice and shared objects (M7, teammate).** Browser records up to 15 s, converts to 24 kHz mono WAV, `voice/` transcribes (`muse-voice-transcribe-1.0`) and plans (`muse-wonder-1.0`, strict JSON schema, ≤40 parts, placement relations, symmetric `corners_below` legs, one repair attempt), then `web/objects.js` builds and places the assembly in free space; undo removes the last creation. `object-protocol.js` whitelists the render recipe. The generating browser sends `op:add|delete`; the host's `scene` carries definitions, acks and tombstones, so late joiners and reconnecting laptops reconstruct everything without a key. `ASR_MODEL` and `OBJECT_MODEL` override the model IDs.
 
+**Sets, first slice (B).** `?set=<id>` (default `workshop`) picks an entry of `SETS` in `web/sets.js`; unknown ids throw at startup. `main.js` calls `applyEnvironment(scene, look, set.environment)` (sky, fog, hemisphere/sun/fill lights, floor colour, grid), moves `blocks` to `set.workspace`, then `loadSetModel` (GLTFLoader, passed in so `sets.js` imports only three) loads the model into `scene` as `root.name = 'scenery'`. `scenery.js`: `fitScenery` (scale, stand on y = 0, centre footprint), `prepareScenery` (`userData.scenery`, receives but does not cast shadows, `matrixAutoUpdate = false`), `sceneryStats`, `disposeScenery`. **Invariant: scenery never goes in `blocks`** (see B below). Dev console: `app.set`, `app.scenery`, `app.look`, `app.setReady` (promise); a `[set]` log line gives triangles, meshes and materials. Adding a set: GLB in `web/assets/<set>/`, a `SETS` entry, a `CREDITS.md` row; `tests/scenery.test.mjs` validates the file, credit, scale and workspace. Load errors are logged and leave the plain workshop. Details and measurements are under Planned work > B. **unit + e2e** only.
+
 **Gaze validation.** **Validate gaze** (after calibrating) shows five held-out dots through the same overlay, records every distinct frame (features, head snapshot, unclamped prediction), and reports mean and p90 error in px and screen heights in the tools panel and the console. Validation never fits or changes the bias; a cancelled run is not reported; the button is disabled without a webcam calibration. Raw data: `app.gazeUI.dataset`. **unit** only; **no real eyes have been measured yet** (see Known issues).
 
 **Mouse fallback.** `?tracker=mouse` (`web/mouse-tracker.js`): the cursor is gaze (the `pointer` source) and a right hand drawn under it (thumb-index midpoint exactly at the cursor, so pressing never nudges a grab); the left button on the scene pinches; right-click locks the pointer for mouse-look. It sends normal tracker frames, so everything downstream and the other laptop are unchanged. **unit + e2e** (a click-drag moves a block and the host sees it).
 
 **Scene sync scaling.** See Protocol. Verified by unit tests (60-assembly scene reconstructed by a joiner, poses-only steady state, bounded acks and tombstones, spec owed until delivered) and the e2e (a reloaded guest rebuilds a voice object); mutation-checked. The relay limit is tested for a 3 MiB pass-through and an over-limit close.
 
-**Tests.** 134 Node tests and 47 Python tests pass, and the two-browser e2e (`tests/e2e/run.py`) passes locally. Multiplayer logic, grip grace, gaze validation, scene-sync scaling and the mouse fallback were mutation-checked.
+**Tests.** 150 Node tests and 49 Python tests pass, and the two-browser e2e (`tests/e2e/run.py`) passes locally. Multiplayer logic, grip grace, gaze validation, scene-sync scaling and the mouse fallback were mutation-checked.
 
 ## Known issues and verification debt (most important first)
 1. **Nothing has run live.** Not on two real laptops, not with real eyes, not with a real head turn. The head-rotation sign in `headQuaternion` is derived from the tracker's conventions and unit-tested, not checked on a real head (if the avatar turns the wrong way, fix it in that one function).
@@ -165,7 +168,7 @@ Verification legend: **unit** = Node/Python tests, **sim** = scripted simulation
 Ordered by dependency and ease, with no dates. Each item says why, where and when it is done.
 
 ### A. Foundations (done)
-Gaze validation UI, grip grace, scene-sync scaling, the in-repo e2e, and the mouse fallback are implemented (see Implemented). Sets are unblocked.
+Gaze validation UI, grip grace, scene-sync scaling, the in-repo e2e, and the mouse fallback are implemented (see Implemented). Sets are unblocked; the first slice is in.
 
 ### B. Sets
 **What.** A set changes the world around you: ground, sky, lighting, fog, ambient effects, spawn points, and its own pool of **grabbable props**. The host switches it and both users see the same set. **On a switch, every scene object is erased completely** (starter blocks, voice objects, props).
