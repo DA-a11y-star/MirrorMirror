@@ -1,4 +1,4 @@
-"""One Euro filter extracted from the working hand-tracking prototype."""
+"""One Euro filter for smoothing hand and head signals."""
 
 import math
 

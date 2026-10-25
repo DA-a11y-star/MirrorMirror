@@ -20,7 +20,7 @@ Key web-side ideas:
 - **Intents.** Keyboard and mouse are read only in `input.js`, which produces one intents object per frame. `gestures.js` turns the tracker's poses into the same object (the two are summed and clamped in `main.js`), so locomotion and camera code are unchanged.
 - **Host authority.** Laptop A owns the shared scene. Everyone else only renders what the host and the object's current holder send.
 
-Existing sensing code: `tracker/hands.py`, `tracker/gestures.py`, `tracker/filters.py` were extracted from the old `hand_mouse.py` prototype (since deleted). Use webcam iris tracking with screen calibration for gaze now; keep its provider replaceable by a dedicated eye tracker later. Wrap existing sensing code rather than rewriting it.
+Existing sensing code: `tracker/hands.py`, `tracker/gestures.py`, `tracker/filters.py` hold the shared sensing code. Use webcam iris tracking with screen calibration for gaze now; keep its provider replaceable by a dedicated eye tracker later. Wrap existing sensing code rather than rewriting it.
 
 ## Layout
 ```

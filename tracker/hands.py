@@ -1,4 +1,4 @@
-"""MediaPipe/solvePnP helpers shared with hand_mouse.py, plus a browser frame adapter."""
+"""MediaPipe/solvePnP helpers, plus a browser frame adapter."""
 
 import math
 import urllib.request
@@ -41,7 +41,7 @@ class HandTracker:
         live, seen = [], set()
         raw = []
         for lm, world, handedness in zip(res.hand_landmarks, res.hand_world_landmarks, res.handedness):
-            # Preserve the prototype's mirrored-camera convention.
+            # Mirrored-camera convention: MediaPipe's Left is the user's Right.
             label = {"Left": "Right", "Right": "Left"}[handedness[0].category_name]
             raw.append([label, landmarks_to_array(lm), landmarks_to_array(world)])
         if len(raw) == 2 and raw[0][0] == raw[1][0]:

@@ -1,4 +1,4 @@
-"""The prototype's hand-size-normalized gestures, plus one-frame pose labels for the browser.
+"""Hand-size-normalized pinch gestures, plus one-frame pose labels for the browser.
 
 Python classifies a static pose per frame. Temporal machines (mode toggle, joystick) live in
 web/gestures.js so feel can be tuned with a browser reload.

@@ -17,16 +17,11 @@ A shared 3D block-modeling workspace driven by eyes, hands, and voice, built for
 | 7. Voice-to-CAD | Muse transcription → Muse Wonder primitive assemblies, shared through the relay with creation, movement, undo and late-join reconstruction; real-user rehearsal pending |
 | 8. Polish | Queued: **8a fast-motion tracking recovery**, **8b side-profile stability**, then **8c sound/feedback/visuals** |
 
-The browser tracker reuses the sensing algorithms from the standalone OpenCV prototype (`hand_mouse.py`). Shared camera geometry, gesture classification and One Euro filtering now live in `tracker/`; the prototype imports these same helpers.
-
 Agreed execution order: milestone 2 → 4 → 5, with a user review after each completion. Locomotion remains milestone 3; the two newly reported tracking issues are deferred to milestone 8 unless they block the interaction demo.
 
 ## Files
 
 ```
-hand_mouse.py          Standalone hand-tracking prototype (OpenCV window): gestures, depth, rotation,
-                       grabbable 3D shapes, mouse control, juggling
-juggle.py              Juggling physics used by hand_mouse.py
 hand_landmarker.task   MediaPipe hand model (downloaded automatically if missing)
 face_landmarker.task   Committed MediaPipe face/iris model for webcam gaze
 requirements.txt       Python dependencies
@@ -87,7 +82,6 @@ Current MediaPipe releases (1.1.1 is installed here) no longer include the legac
 
 On macOS, grant the app you run from (Cursor, Terminal, iTerm) permissions in System Settings > Privacy & Security, then fully quit and reopen it:
 - **Camera**, or the webcam won't open.
-- **Accessibility** is needed only for the standalone prototype's OS mouse control. The browser tracker doesn't import `pynput`, open a preview window or control your mouse.
 
 ## Running the web app
 
@@ -145,7 +139,7 @@ Run the tracker with `--gaze none` to skip the face model and run only the accep
 
 The browser reconnects automatically after tracker restarts. A brief detection gap holds the last hand pose for 0.35 seconds. If the feed itself stops, the browser clears hands and releases active pinches after 0.5 seconds without a valid new frame; a socket disconnect clears immediately.
 
-Use `--camera 1` for a different camera or `--port 8767` for a different local port (also update `TRACKER_URL`). Close the standalone prototype before starting the browser tracker so they don't compete for the webcam. Stop the tracker with Ctrl+C.
+Use `--camera 1` for a different camera or `--port 8767` for a different local port (also update `TRACKER_URL`). Stop the tracker with Ctrl+C.
 
 For camera-free development, set `TRACKER_SOURCE = 'mock'` in `web/config.js`. Two animated hands sway and pinch. While `DEV_ORBIT` is on, drag to orbit, scroll to zoom, and right-drag to pan. `window.app` exposes the renderer, scene, camera, hands and latest tracker frame in the dev console.
 
@@ -245,7 +239,7 @@ A separate live smoke check transcribed synthesized “Create a blue chair with 
 
 The browser accepts the `frame` and `gesture` messages described in `CLAUDE.md`, with these concrete conventions:
 
-- **`lm`** is 21 landmarks per hand, in meters relative to the webcam: **x** toward the user's right (the image is mirrored), **y** down, **z** away from the webcam toward the user. This is the camera-space output of the prototype's `solvePnP` step.
+- **`lm`** is 21 landmarks per hand, in meters relative to the webcam: **x** toward the user's right (the image is mirrored), **y** down, **z** away from the webcam toward the user. This is the camera-space output of the `solvePnP` step.
 - **`pinch`** is a strength from 0 (open) to 1 (touching).
 - **`pinching`** is the authoritative thumb-index state after fist suppression and hysteresis. Use it / the transition events for actions rather than thresholding the visual strength again.
 - **`side`** is lowercase `left` or `right`, with at most one hand per side. Duplicate handedness detections are suppressed to avoid conflicting gesture identities.
@@ -261,55 +255,15 @@ The capture thread only acquires frames. An inference worker mirrors/converts th
 
 `hands.js` eases the roughly 30 Hz tracker frames into smooth 60 fps motion (`SMOOTHING_RATE`). The easing happens in tracker space, and positions are mapped with the current camera every frame, so hands stay put relative to the view while the camera moves. Hands are slotted by side so the smoothing never blends one hand into the other.
 
-## Running the prototype
+## Tuning
 
-```bash
-.venv/bin/python hand_mouse.py
-```
-
-This opens a "Hand Mouse" window with the camera feed and overlays. Click the window before pressing keys; OpenCV only receives keys while its window is in front. It tracks up to two hands.
-
-### Modes and keys
-
-| Key | Action |
-|---|---|
-| `m` | Toggle mouse mode (press again to return to shapes) |
-| `j` | Toggle juggle mode |
-| `c` | Toggle the camera image; tracking keeps running on a dark background |
-| `r` | Reset the shapes, or the juggling balls and score |
-| `p` | Print the primary hand's 21 landmarks (normalized and in cm) |
-| `q` / Esc | Quit |
-
-**Shapes mode (default).** A cube and a pyramid float in the camera view.
-- **One hand:** pinch thumb and index over a shape to grab it (yellow outline means grabbable, white means held). Move your hand to move it, including toward and away from the camera, and turn your hand to rotate it.
-- **Two hands:** pinch the same shape with both hands, then pull apart or push together to stretch or squeeze it along the line between them (0.3x to 4x per axis). Let go with either hand and the other keeps holding it without a jump.
-
-Rotation and depth are flipped to the user's point of view: held shapes turn the way you see your hand turn, and pushing toward the screen pushes a shape deeper.
-
-**Mouse mode.** The palm moves the cursor through an "active box" in the frame. Thumb plus index is a left click (hold to drag), thumb plus middle is a right click. A closed fist blocks clicks.
-
-**Juggle mode.** Three floaty balls with gravity and drag. Close a hand (fist or pinch) near a ball to catch it, and open the hand while moving to throw it with your hand's velocity. Balls bounce off the walls and a soft ceiling. Catches, streak, best streak, and drops are scored at the top.
-
-### Indicators
-
-- **Pinch bars** (top left) fill as each finger nears the thumb; the white tick marks the pinch threshold. Thumb plus ring and the fist are indicators only.
-- **Depth bar** (right edge) shows hand-to-camera distance, 20 to 90 cm.
-- **Rotation arrows** on each palm, plus roll, pitch, and yaw along the bottom, measured from the user's point of view. The bottom line also says whether the palm or the back of the hand faces the camera.
-- **A gray skeleton** means tracking dropped out and the hand's last pose is being held.
-
-### Tuning
-
-Shared sensing constants are in `tracker/hands.py`, `tracker/gestures.py` and `tracker/filters.py`. Prototype interaction constants remain in `hand_mouse.py` and `juggle.py`.
+Sensing constants are in `tracker/hands.py`, `tracker/gestures.py` and `tracker/filters.py`.
 
 | Constant | Effect |
 |---|---|
 | `CLOSE`, `OPEN` | Pinch start and release thresholds, as a fraction of hand size (wrist to middle-finger base) |
 | `CAMERA_HFOV_DEG` | Webcam field of view. Depth readings scale with it, so adjust if distances look off |
-| `ACTIVE_BOX` | Part of the frame that maps to the full screen in mouse mode |
 | `HOLD_TIME` | How long a lost hand keeps its last pose (default 0.35 s) |
-| `MIN_STRETCH`, `MAX_STRETCH` | Two-hand stretch limits |
-| `pinch_filter`, `axes_filter` in `HandState` | Smoothing for held-shape position and rotation. Lower `min_cutoff` for less jitter, raise `beta` for less lag |
-| `GRAVITY`, `DRAG`, `THROW_GAIN`, `CATCH_MARGIN` | Juggling feel (`juggle.py`) |
 
 ## How the tracking works
 
