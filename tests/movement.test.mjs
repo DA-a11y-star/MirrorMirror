@@ -304,7 +304,7 @@ test('input: keys become intents, toggles fire for one frame, taps shorter than 
   key('keyup', 'ShiftLeft');
   assert.equal(input.poll().move.vertical, 1);
 
-  for (const [code, name] of [['KeyM', 'mode'], ['KeyV', 'view'], ['KeyC', 'freeCam'], ['Backquote', 'dev'], ['KeyP', 'depthFx'], ['KeyR', 'reset'], ['KeyH', 'recenter']]) {
+  for (const [code, name] of [['KeyM', 'mode'], ['KeyV', 'view'], ['KeyC', 'freeCam'], ['Backquote', 'dev'], ['KeyP', 'depthFx'], ['KeyR', 'reset'], ['KeyH', 'recenter'], ['KeyJ', 'presentation']]) {
     key('keydown', code);
     assert.equal(input.poll().toggles[name], true, name);
     assert.equal(input.poll().toggles[name], false, `${name} lasts one frame`);

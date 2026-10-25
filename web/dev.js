@@ -43,6 +43,7 @@ export class Dev {
     this.labels = new Map();
     for (const block of blocks.children) {
       const el = document.createElement('div');
+      el.className = 'dev-label';
       el.textContent = block.userData.id;
       Object.assign(el.style, {
         position: 'fixed', transform: 'translate(-50%, -100%)', font: '11px ui-monospace, Menlo, monospace',

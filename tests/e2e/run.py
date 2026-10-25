@@ -21,7 +21,8 @@ LINUX = platform.system() == 'Linux'
 
 
 def find_chrome():
-    for candidate in (os.environ.get('CHROME'), *map(shutil.which, ('google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser', 'chrome')), MAC_CHROME):
+    windows_chrome = Path(os.environ.get('PROGRAMFILES', 'C:/Program Files')) / 'Google/Chrome/Application/chrome.exe'
+    for candidate in (os.environ.get('CHROME'), *map(shutil.which, ('google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser', 'chrome')), windows_chrome, MAC_CHROME):
         if candidate and Path(candidate).exists():
             return candidate
 
@@ -34,10 +35,22 @@ OUT.mkdir(exist_ok=True)
 class Quiet(SimpleHTTPRequestHandler):
     def log_message(self, *a): pass
 
+    def do_GET(self):
+        try:
+            super().do_GET()
+        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+            pass  # Reloading/leaving a preview intentionally cancels its outstanding resource requests.
+
+
+class TestServer(ThreadingHTTPServer):
+    # Chrome opens many module requests together; Windows refuses connections beyond the small default backlog.
+    request_queue_size = 128
+
 
 class Page:
     def __init__(self, name, url):
         self.name, self.url, self.errors, self.counter = name, url, [], 0
+        self.console_errors = []
 
     async def start(self):
         self.profile = tempfile.mkdtemp(prefix=f'profile-{self.name}-', dir=OUT)
@@ -50,13 +63,19 @@ class Page:
             f'--user-data-dir={self.profile}', '--window-size=900,640', self.url], stdout=self.log, stderr=self.log)
         active = Path(self.profile) / 'DevToolsActivePort'
         for _ in range(150):
-            if active.exists(): break
+            try:
+                port = int(active.read_text().splitlines()[0])
+                break
+            except (OSError, ValueError, IndexError):
+                pass  # Chrome may still be writing (or exclusively holding) DevToolsActivePort on Windows.
             await asyncio.sleep(.1)
-        port = int(active.read_text().splitlines()[0])
+        else:
+            raise RuntimeError(f'Chrome did not open its debugging port; see {self.log.name}')
         tabs = json.load(urllib.request.urlopen(f'http://127.0.0.1:{port}/json'))
         page = next(t for t in tabs if t['type'] == 'page')
         self.ws = await connect(page['webSocketDebuggerUrl'], proxy=None, max_size=16_000_000)
         await self.call('Runtime.enable')
+        await self.call('Log.enable')
 
     async def call(self, method, params=None):
         self.counter += 1
@@ -64,6 +83,10 @@ class Page:
         while True:
             msg = json.loads(await asyncio.wait_for(self.ws.recv(), 20))
             if msg.get('method') == 'Runtime.exceptionThrown': self.errors.append(msg['params']['exceptionDetails'])
+            if msg.get('method') == 'Log.entryAdded' and msg['params']['entry']['level'] == 'error':
+                self.console_errors.append(msg['params']['entry'])
+            if msg.get('method') == 'Runtime.consoleAPICalled' and msg['params']['type'] == 'error':
+                self.console_errors.append({'source': 'console', 'text': ' '.join(str(a.get('value', a.get('description', ''))) for a in msg['params']['args'])})
             if msg.get('id') == self.counter:
                 if 'error' in msg: raise RuntimeError(msg['error'])
                 return msg['result']
@@ -79,7 +102,7 @@ class Page:
             if await self.js(expression): return True
             await asyncio.sleep(.1)
         await self.shot(f'fail-{self.name}.png')
-        raise AssertionError(f'{self.name}: timed out waiting for {what or expression}; errors={self.errors}')
+        raise AssertionError(f'{self.name}: timed out waiting for {what or expression}; errors={self.errors}; console={self.console_errors}')
 
     async def shot(self, name):
         r = await self.call('Page.captureScreenshot', {'format': 'png'})
@@ -124,7 +147,7 @@ QUIET = 'app.gaze.pointer = null; app.interaction.resetTargeting(); 0'
 async def main():
     relay_server = await serve(Relay().handle, '127.0.0.1', 0, **SERVER_OPTIONS)
     relay_port = relay_server.sockets[0].getsockname()[1]
-    http = ThreadingHTTPServer(('127.0.0.1', 0), functools.partial(Quiet, directory=str(ROOT / 'web')))
+    http = TestServer(('127.0.0.1', 0), functools.partial(Quiet, directory=str(ROOT / 'web')))
     threading.Thread(target=http.serve_forever, daemon=True).start()
     base = f'http://127.0.0.1:{http.server_port}/?relay=ws://127.0.0.1:{relay_port}&tracker=mock&preset=workshop'
     a, b = Page('A', base + '&user=A'), Page('B', base + '&user=B')
@@ -332,15 +355,16 @@ async def main():
         relay_server.close()
 
 
-if CHROME is None:
-    shutil.rmtree(OUT, ignore_errors=True)
-    print('SKIP: no Chrome found; set CHROME to its path')
-    sys.exit(0)
-try:
-    asyncio.run(main())
-except BaseException:
-    print(f'e2e screenshots and Chrome logs kept in {OUT}', file=sys.stderr)
-    raise
-else:
-    if not os.environ.get('E2E_OUT'):
+if __name__ == '__main__':
+    if CHROME is None:
         shutil.rmtree(OUT, ignore_errors=True)
+        print('SKIP: no Chrome found; set CHROME to its path')
+        sys.exit(0)
+    try:
+        asyncio.run(main())
+    except BaseException:
+        print(f'e2e screenshots and Chrome logs kept in {OUT}', file=sys.stderr)
+        raise
+    else:
+        if not os.environ.get('E2E_OUT'):
+            shutil.rmtree(OUT, ignore_errors=True)

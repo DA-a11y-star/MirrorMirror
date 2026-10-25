@@ -175,6 +175,7 @@ const presentationButton = document.getElementById('presentation-toggle');
 function togglePresentation(force) {
   const enabled = typeof force === 'boolean' ? force : !document.body.classList.contains('presentation');
   document.body.classList.toggle('presentation', enabled);
+  if (enabled && dev.enabled) dev.toggle();
   presentationButton.setAttribute('aria-pressed', String(enabled));
   presentationButton.textContent = enabled ? 'Show controls · J' : 'Presentation · J';
 }
