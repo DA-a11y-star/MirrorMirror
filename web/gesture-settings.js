@@ -8,6 +8,7 @@ const AXES = [
   { group: 'Look hand', label: 'Turn', full: 'FULL_LOOK_LATERAL', dead: 'DEAD_LOOK_LATERAL', deadMax: 0.6 },
   { group: 'Look hand', label: 'Pitch', full: 'FULL_LOOK_VERTICAL', dead: 'DEAD_LOOK_VERTICAL', deadMax: 0.6 },
 ];
+import { GAZE_LOOK } from './gaze-look.js';
 // The controls help: shown at the top of the Settings panel, not on the screen all the time.
 const HELP = `
   <p><b>Gestures.</b> MOVE: right palm = move (forward/back, left/right, up/down). Left palm = look (up/down, left/right). One fist recenters that stick. Double-fist then both open switches to EDIT. In EDIT, pinch a block with both hands and spread them to resize it. Hold one fist to talk: “mirror mirror, make a …”.</p>
@@ -30,6 +31,8 @@ export class GestureSettings {
   _load() {
     const saved = JSON.parse(localStorage.getItem(KEY) ?? 'null');
     if (!saved) return {};
+    if (typeof saved.gaze?.enabled === 'boolean') GAZE_LOOK.ENABLED = saved.gaze.enabled;
+    if (Number.isFinite(saved.gaze?.speed)) GAZE_LOOK.SPEED = saved.gaze.speed;
     for (const a of AXES) {
       if (Number.isFinite(saved.dead?.[a.dead])) this.cfg[a.dead] = saved.dead[a.dead];
       if (Number.isFinite(saved.sens?.[a.full])) this.sens[a.full] = saved.sens[a.full];
@@ -40,7 +43,7 @@ export class GestureSettings {
   _save() {
     try {
       const dead = Object.fromEntries(AXES.map(a => [a.dead, this.cfg[a.dead]]));
-      localStorage.setItem(KEY, JSON.stringify({ dead, sens: this.sens }));
+      localStorage.setItem(KEY, JSON.stringify({ dead, sens: this.sens, gaze: { enabled: GAZE_LOOK.ENABLED, speed: GAZE_LOOK.SPEED } }));
     } catch { /* ignore */ }
   }
 
@@ -93,13 +96,34 @@ export class GestureSettings {
       rows.push(row);
       panel.appendChild(row);
     }
+    // Gaze look: whether, and how fast, the view turns toward where the eyes rest near the screen edge.
+    const gazeHeader = document.createElement('h4');
+    gazeHeader.textContent = 'Eyes turn the view';
+    const gazeRow = document.createElement('div');
+    gazeRow.className = 'gs-row';
+    gazeRow.innerHTML = `<label class="gs-check"><input type="checkbox" data-k="on"> Turn the view toward where I look</label>
+      <label>Turn speed <input type="range" min="0.2" max="2" step="0.05" data-k="speed"><output></output></label>`;
+    const on = gazeRow.querySelector('[data-k=on]'), speed = gazeRow.querySelector('[data-k=speed]');
+    const showGaze = () => {
+      on.checked = GAZE_LOOK.ENABLED;
+      speed.value = GAZE_LOOK.SPEED;
+      speed.disabled = !GAZE_LOOK.ENABLED;
+      speed.nextElementSibling.textContent = `${(+speed.value).toFixed(2)}×`;
+    };
+    on.onchange = () => { GAZE_LOOK.ENABLED = on.checked; this._save(); showGaze(); };
+    speed.oninput = () => { GAZE_LOOK.SPEED = +speed.value; this._save(); showGaze(); };
+    showGaze();
+    panel.append(gazeHeader, gazeRow);
     const reset = document.createElement('button');
     reset.textContent = 'Reset to defaults';
     reset.onclick = () => {
       for (const a of AXES) { this.sens[a.full] = 1; this.cfg[a.dead] = this.defaultDead[a.dead]; }
+      GAZE_LOOK.ENABLED = true;
+      GAZE_LOOK.SPEED = 1;
       this._apply();
       this._save();
       rows.forEach(r => r.show());
+      showGaze();
     };
     panel.appendChild(reset);
     const toggle = root.querySelector('#gs-toggle');
@@ -119,6 +143,7 @@ export class GestureSettings {
       .gs-row { padding: 4px 0; border-bottom: 1px solid #e6eaf0; }
       .gs-name { font-weight: 600; }
       .gs-row label { display: grid; grid-template-columns: 78px 1fr 40px; align-items: center; gap: 6px; font-size: 12px; }
+      .gs-check { grid-template-columns: auto 1fr !important; margin-bottom: 4px; }
       .gs-row output { text-align: right; font-variant-numeric: tabular-nums; }
       #gs-panel > button { margin-top: 10px; width: 100%; }
     `;
