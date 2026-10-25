@@ -201,3 +201,72 @@ test('render protocol rejects malformed primitives, mismatched IDs, duplicate pa
   add.obj.spec.id = 'different';
   assert.equal(validOp(add), false);
 });
+
+// A realistic voice object: full-precision floats, several parts.
+function bigSpec(i, parts = 12) {
+  const r = k => Math.abs(Math.sin(i * 12.9898 + k * 78.233));
+  return { version: 1, id: `generated-${String(i).padStart(12, '0')}`, name: `Prop number ${i}`, position: [0, 0, 0], quaternion: [0, 0, 0, 1],
+    parts: Array.from({ length: parts }, (_, j) => ({ id: `part-${j}`, shape: ['box', 'sphere', 'cylinder', 'cone'][j % 4],
+      size: [.1 + r(j) * .4, .1 + r(j + 1) * .4, .1 + r(j + 2) * .4], position: [r(j + 3) - .5, r(j + 4), r(j + 5) - .5],
+      quaternion: [0, 0, 0, 1], color: '#4c6ef5' })) };
+}
+const hasSpec = wire => wire.objects.some(o => o.kind === 'assembly' && 'spec' in o);
+const bytes = wire => JSON.stringify(wire).length;
+
+test('steady-state scenes carry poses only, and a joiner gets every recipe the moment it first appears', () => {
+  const a = client('A'), b = client('B');
+  for (let i = 0; i < 59; i++) a.objects.add(bigSpec(i), { place: false }).position.set(i * .1, 0, -i * .07);
+  const full = scene(a, b, 0);
+  a.sync.sceneSent(true);
+  assert.equal(b.sync.meshes.size, 60);
+  assert.ok(bytes(full) < 300_000, `a full 60-object scene is ${bytes(full)} bytes`);
+
+  const steady = scene(a, b, 100);
+  assert.equal(hasSpec(steady), false);
+  assert.ok(bytes(steady) < 20_000, `a steady-state scene is ${bytes(steady)} bytes`);
+
+  const late = client('C');
+  late.sync.applyScene(steady, 150, new Set()); // poses alone can't build anything, and must not throw
+  assert.equal(late.sync.meshes.size, 1);
+  a.sync.applyState({ user: 'C', held: [] }, 200, new Set()); // first sign of the joiner
+  const joined = scene(a, late, 200);
+  a.sync.sceneSent(true);
+  assert.equal(hasSpec(joined), true);
+  assert.equal(late.sync.meshes.size, 60, 'the joiner reconstructs everything');
+  const probe = a.blocks.children[30];
+  assert.deepEqual(late.sync.meshes.get(probe.userData.id).position.toArray(), probe.position.toArray());
+
+  a.sync.applyState({ user: 'C', held: [] }, 250, new Set()); // a peer we already know doesn't trigger another full scene
+  assert.equal(hasSpec(scene(a, late, 300)), false);
+});
+
+test('a recipe stays owed until a scene carrying it was delivered, and every recipe is re-sent every couple of seconds', () => {
+  const a = client('A'), b = client('B');
+  a.objects.add(spec('generated-one'));
+  assert.equal(hasSpec(scene(a, b, 0)), true);
+  a.sync.sceneSent(false); // backpressure dropped it
+  assert.equal(hasSpec(scene(a, b, 100)), true, 'not used up by a scene that never left');
+  a.sync.sceneSent(true);
+  assert.equal(hasSpec(scene(a, b, 200)), false);
+  a.sync.sceneSent(true);
+  a.objects.add(spec('generated-two'));
+  const next = scene(a, b, 300);
+  assert.deepEqual(next.objects.filter(o => 'spec' in o).map(o => o.id), ['generated-two'], 'only the new object brings a recipe');
+  a.sync.sceneSent(true);
+  assert.equal(hasSpec(scene(a, b, 1900)), false);
+  assert.equal(hasSpec(scene(a, b, 2200)), true, 'periodic full scene heals anything that was lost');
+});
+
+test('acks and tombstones are broadcast briefly and forgotten, so scenes stay small however long the session runs', () => {
+  const a = client('A');
+  for (let i = 0; i < 1200; i++) { // two minutes with one guest deletion every 100 ms
+    const now = i * 100;
+    a.sync.update(.1, now, new Set());
+    a.sync.applyOp({ type: 'op', user: 'B', seq: i, opId: `B:${i}`, op: 'delete', obj: { id: `generated-${i}` } });
+    const wire = envelope('A', a.sync.sceneSnapshot(now));
+    assert.equal(validScene(wire), true);
+    assert.ok(wire.acks.length <= 31 && wire.deleted.length <= 51, `${wire.acks.length} acks, ${wire.deleted.length} tombstones at ${now} ms`);
+  }
+  assert.ok(a.sync.acks.size <= 101, `${a.sync.acks.size} acks kept`);
+  assert.ok(a.sync.deleted.size <= 601, `${a.sync.deleted.size} tombstones kept`);
+});

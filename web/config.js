@@ -13,7 +13,8 @@ export const HOST_ID = 'A'; // laptop A is the scene authority
 export const RELAY_URL = params.get('relay') ?? `ws://${globalThis.location?.hostname || 'localhost'}:8765`;
 export const TRACKER_URL = 'ws://localhost:8766';
 export const VOICE_URL = 'ws://localhost:8767';
-// 'websocket' = local Python tracker; 'mock' = animated hands for camera-free development.
+// 'websocket' = local Python tracker; 'mock' = animated hands for camera-free development; 'mouse' = the cursor is
+// gaze and hand, left button pinches, right-click mouse-looks (a fallback for a dead camera).
 export const TRACKER_SOURCE = params.get('tracker') ?? 'websocket';
 // 'webcam' = calibrated iris features; 'external' = tracker-provided screen gaze; 'pointer' = explicit dev fallback.
 export const GAZE_SOURCE = 'webcam';

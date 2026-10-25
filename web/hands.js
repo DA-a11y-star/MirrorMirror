@@ -15,6 +15,14 @@ export function trackerToWorld(p, camera, out) {
   return camera.localToWorld(out);
 }
 
+// The inverse of trackerToWorld at the reference depth, in the camera's own frame: the webcam-space point at which a
+// hand appears under screen point (x, y), each 0..1 from the top left. Lets the mouse stand in for a hand.
+export function screenToTracker(x, y, { fov, aspect }) {
+  const halfHeight = HAND_DEPTH * Math.tan(fov * Math.PI / 360);
+  const lx = (2 * x - 1) * halfHeight * aspect, ly = (1 - 2 * y) * halfHeight;
+  return [lx / HAND_GAIN, -(ly + HAND_DROP) / HAND_GAIN, REF_Z];
+}
+
 const BONES = [
   [0, 1], [1, 2], [2, 3], [3, 4],
   [0, 5], [5, 6], [6, 7], [7, 8],

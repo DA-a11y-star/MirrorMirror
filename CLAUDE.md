@@ -30,7 +30,7 @@ relay/     relay.py
 web/       index.html, main.js, config.js, scene.js
            landing.js, landing.css, panorama.js, presets.js, set-scene.js, set-layout.js
            presets/ (index.json registry + one folder per preset: preset.json)
-           hands.js, tracker.js, mock.js, offaxis.js
+           hands.js, tracker.js, mock.js, mouse-tracker.js, offaxis.js
            gaze.js, gaze-ui.js, gaze-validation.js
            interaction.js
            input.js, locomotion.js, camera.js, dev.js
@@ -39,7 +39,7 @@ web/       index.html, main.js, config.js, scene.js
            net.js, sync.js, object-protocol.js, objects.js
            voice.js, voice-ui.js
            vendor/ (three.js 0.186, OrbitControls, fonts/ for the landing page)
-tests/     Node (*.test.mjs) and Python (test_*.py)
+tests/     Node (*.test.mjs) and Python (test_*.py); tests/e2e/run.py is the two-browser run through the real relay
 README.md, MOVEMENT_CAMERA.md (the movement/camera task spec), GESTURE_UX.md (the gesture task spec)
 hand_landmarker.task, face_landmarker.task (MediaPipe models, committed so venue Wi-Fi isn't needed)
 ```
@@ -58,10 +58,11 @@ python -m voice.main                       # only on a laptop that generates obj
 - Laptop A opens `http://localhost:8000`. Laptop B opens `http://<A's address>:8000/?user=B` and runs only its own tracker. Find A's address with `ipconfig getifaddr en0`.
 - `web/config.js` holds `USER_ID`, `HOST_ID`, `RELAY_URL`, `TRACKER_URL`, `VOICE_URL`, screen size in meters (for the depth effect), `PARALLAX_STRENGTH`, `DEV_ORBIT`. `user`, `relay` and `tracker` can be overridden in the page URL (`?user=B&relay=ws://localhost:8765&tracker=mock`). **No IP address is hard-coded**: the relay is looked up on the machine that served the page.
 - One laptop, two users: open two browser **windows** (not tabs: a background tab stops rendering and sending). Arrow keys move only the window you last clicked.
+- **No camera:** `?tracker=mouse` makes the cursor gaze and hand, the left button the pinch, and right-click mouse-look. It starts in EDIT mode (pinch only grabs there); the hand has no `pose`, so it never steers the MOVE joysticks.
 - Controls: arrows walk and turn, A/D strafe, Space/Shift up/down (flying is always on), M toggle MOVE/EDIT mode, V first/third person, C free cam, P depth effect, R respawn, H recenter head, backtick dev overlay. Click the scene for mouse look (Esc releases).
 
 ## Protocol
-All messages are JSON, which is fine at this size on a LAN. Optimize only if measured latency demands it (see Known issues: scene size).
+All messages are JSON, which is fine at this size on a LAN. Scenes already send poses only; optimize further only if measured latency demands it.
 
 **tracker → web** (at tracker frame rate)
 ```json
@@ -81,17 +82,18 @@ All messages are JSON, which is fine at this size on a LAN. Optimize only if mea
  "hands":[{"side","pinch","lm":[[x,y,z],...21]}],
  "held":[{"id":"b7","pos":[...],"quat":[...]}]}                    // ~30 Hz
 {"type":"op","user":"A","seq":124,"opId":"A:...","op":"add|delete","obj":{...}} // render-only assembly edit
-{"type":"scene","user":"A","seq":125,"acks":["A:..."],"deleted":[],"objects":[{"id","kind","pos","quat","scale","color"}]} // host, ~10 Hz; assemblies include spec
+{"type":"scene","user":"A","seq":125,"acks":["A:..."],"deleted":[],"objects":[{"id","kind","pos","quat","scale","color"}]} // host, ~10 Hz; assemblies are poses only, plus `spec` when owed
 ```
 
-`avatar` is exactly `Locomotion.state()` (feet position, velocity, yaw, head pitch, fly state); the receiver drives its own `Avatar` body with it, so walk, lean and bob look the same on both laptops. Free cam never moves the avatar, so it isn't sent. The two users spawn at opposite ends, facing each other (`SPAWNS` in `scene.js`). `head.quat` is the tracker's head rotation, converted in `headQuaternion` in `remote-avatar.js`. `target` is the object the sender is looking at (violet glow on the other laptop). `hands` are the sender's tracker landmarks, drawn through the sender's eye frame. Assembly `op:add` carries `obj: {id, kind: "assembly", spec, pos, quat, scale}`; `spec` holds only version, id/name and primitive render parts. `op:delete` carries `obj: {id}`. Audio, transcripts, prompts and model/API requests stay on the generating device.
+`avatar` is exactly `Locomotion.state()` (feet position, velocity, yaw, head pitch, fly state); the receiver drives its own `Avatar` body with it, so walk, lean and bob look the same on both laptops. Free cam never moves the avatar, so it isn't sent. The two users spawn at opposite ends, facing each other (`SPAWNS` in `scene.js`). `head.quat` is the tracker's head rotation, converted in `headQuaternion` in `remote-avatar.js`. `target` is the object the sender is looking at (violet glow on the other laptop). `hands` are the sender's tracker landmarks, drawn through the sender's eye frame. Assembly `op:add` carries `obj: {id, kind: "assembly", spec, pos, quat, scale}`; `spec` holds only version, id/name and primitive render parts. `op:delete` carries `obj: {id}`. A host `scene` carries an assembly's `spec` only when the object is new, when a laptop that the host hasn't heard from in 700 ms sends its first `state` (a join or reload), and in a full scene every 2 s as self-healing; otherwise just `id, kind, pos, quat, scale`, so 60 objects are about 6 KB instead of 100–500 KB. A spec is owed until `Net.send` reports the scene left (`SceneSync.sceneSent`). A guest ignores a pose for an assembly it can't build yet. Audio, transcripts, prompts and model/API requests stay on the generating device.
 
 Rules:
 - Each `state` message is a full snapshot. Drop anything with an older `seq`; `seq` starts at `Date.now()` so a reloaded page isn't mistaken for old traffic.
 - **Ownership:** whoever grabs an object owns it and streams its transform in `held`. Everyone else only renders it. A block someone else holds can't be targeted or grabbed. If both grab the same object in the same instant, the lower user id keeps it and the other laptop lets go.
 - Laptop A is the scene authority: it applies `op` messages (guests retry adds and deletes until a host scene acknowledges the exact `opId`), keeps deletion tombstones so a delayed add can't resurrect an object, and broadcasts `scene`.
 - Smooth remote poses on receipt (`pos += (target - pos) * 0.3` per frame, implemented as the same easing in terms of `dt`).
-- The relay keeps no state. A laptop that joins or reloads catches up from the host's 10 Hz `scene` messages, which include assembly definitions.
+- The relay keeps no state. A laptop that joins or reloads catches up from the host's `scene` messages: the first `state` it sends makes the host include every assembly definition. The relay accepts messages up to 4 MiB (`MAX_MESSAGE_BYTES`) as headroom, since a full scene can reach about 0.5 MB.
+- `acks` and `deleted` are timestamped on the host and broadcast only while a retry could need them (3 s and 5 s), then forgotten (10 s and 60 s); each list is capped at 256 per message. A guest removes any assembly a scene lacks, so tombstones only need to outlive delayed add retries.
 - After releasing an object, ignore `scene` messages for it for 400 ms (`SETTLE_MS`), so a snapshot sent before the release arrived can't pull it back. A laptop that stops sending for 700 ms loses its holds and its avatar.
 - `MAX_OBJECTS` is 64 scene objects in total.
 
@@ -105,7 +107,7 @@ Rules:
 - Plain files that run immediately. No build tools, frameworks, or TypeScript.
 - Choose the simplest thing that feels good. Hardcoding is fine, except IP addresses and API keys.
 - Tests: Node (`node --test tests/*.test.mjs`) and Python (`python -m unittest discover -s tests`). New logic gets tests, and tests get **mutation-checked**: break the rule on purpose and confirm a test fails. Pure functions where possible (so they test without a browser).
-- A two-browser headless-Chrome run through the real relay (mock trackers, pointer as gaze) was the end-to-end check for multiplayer. It currently lives outside the repo; moving it into `tests/` is planned.
+- `python tests/e2e/run.py` is the end-to-end check: two headless Chromes through the real relay (mock trackers, pointer as gaze), a reload catch-up with a voice object, and a mouse-only user. It needs Chrome (`CHROME`, or on PATH, or the macOS app) and skips without it. Artifacts are kept only on failure, or in `E2E_OUT`. It is not picked up by the Node or Python test commands.
 - Git: PRs use "Create a merge commit" (not squash). Never commit `.pyc`, `.venv/` or API keys (`.gitignore` covers them). Do not commit or push unless asked.
 
 ## Milestone status
@@ -127,7 +129,7 @@ Verification legend: **unit** = Node/Python tests, **sim** = scripted simulation
 
 **Interaction (M4).** Forgiving gaze targeting (`web/interaction.js`): snap radius 0.14 screen heights, sticky 0.2, switch margin and delays, 300 ms grace through blinks and glances. Pinch grabs the targeted object with no snap, scales hand motion by depth (1–6×), clamps to the floor, allows one holder per object and one object per hand, freezes during a brief tracking hold and releases on sustained loss. Calibration refines itself from held grabs (offset only, with safeguards). Works on compound assemblies via `register/unregister/rootOf`.
 
-**Fast-motion work (8a, from the `optimization` branch).** `hands.js` extrapolates fast hands along their measured velocity and raises the catch-up rate with lag; in a simulation with 100 ms of camera-to-screen delay this cut lag by about 25–40% in fast moves (149 → 94 mm at 1 m/s) with identical resting jitter (**sim**), at the cost of a few millimetres of overshoot at an abrupt stop. `OneEuroFilter` hand `d_cutoff` raised to 6 (15–25% less lag when a move starts). The tracker server wakes when a frame is ready instead of polling every 1/60 s. MediaPipe confidence thresholds lowered from 0.6 to 0.5 (**unmeasured**). A `[hands]` console line every 2 s (camera fps, inference rate, detections, held frames) plus inference time and the reason the last grab ended in the HUD. A 0.5 s grip grace stops a one-frame "open pinch" flicker from dropping a block after a fast move (it has a known drift problem: see Known issues).
+**Fast-motion work (8a, from the `optimization` branch).** `hands.js` extrapolates fast hands along their measured velocity and raises the catch-up rate with lag; in a simulation with 100 ms of camera-to-screen delay this cut lag by about 25–40% in fast moves (149 → 94 mm at 1 m/s) with identical resting jitter (**sim**), at the cost of a few millimetres of overshoot at an abrupt stop. `OneEuroFilter` hand `d_cutoff` raised to 6 (15–25% less lag when a move starts). The tracker server wakes when a frame is ready instead of polling every 1/60 s. MediaPipe confidence thresholds lowered from 0.6 to 0.5 (**unmeasured**). A `[hands]` console line every 2 s (camera fps, inference rate, detections, held frames) plus inference time and the reason the last grab ended in the HUD. A 0.5 s grip grace stops a one-frame "open pinch" flicker from dropping a block after a fast move. During the grace the block **holds still** (it no longer follows the open hand), and when the pinch returns the grab re-anchors at the block's current position, so there is no jump (**unit**: normal stop, letting go mid-swing, one-frame flicker; mutation-checked). A release margin relative to the tightest squeeze was tried and reverted; do not retry it.
 
 **Movement and camera (M3, teammate).** `input.js` (intents), `locomotion.js` (walk 2 m/s, fly 4 m/s, smoothed velocity, ±20 m bound, respawn), `camera.js` (first person, third person with spring lag and zoom, free cam that is local only), `dev.js` overlay, and `MOVEMENT_CAMERA.md` as the spec. `DEV_ORBIT = false` by default (walking rig); `true` restores the mouse-orbit camera. Today's `Avatar` is a capsule torso, a sphere head with a visor, and a procedural bob, lean and body-turn.
 
@@ -152,30 +154,28 @@ Verification legend: **unit** = Node/Python tests, **sim** = scripted simulation
 - Verified by **unit** tests (`tests/presets.test.mjs`, `tests/set-layout.test.mjs`; mutation-checked: URL allow-list, shape whitelist, unknown object references, scatter cap, duplicate ids, version, road margins, clear zones, spacing, ring radius, snap, scatter height, pool variety) and headless-Chrome screenshots of every set at 1440×900, 1366×768, 1280×720 and 390×844, including Play into the workspace (144 fps there, landing contexts released). Landing loop measured at 145 fps headless. Not yet tried on the demo laptops.
 - The out-of-repo two-browser e2e opens the page without `?preset=` and now lands on the menu: add `&preset=workshop` to its URLs.
 
-**Gaze validation (partial).** `web/gaze-validation.js` has the held-out target list and the mean/p90 error summary, with tests. It is **not wired into the UI** (see Known issues).
+**Gaze validation.** **Validate gaze** (after calibrating) shows five held-out dots through the same overlay, records every distinct frame (features, head snapshot, unclamped prediction), and reports mean and p90 error in px and screen heights in the tools panel and the console. Validation never fits or changes the bias; a cancelled run is not reported; the button is disabled without a webcam calibration. Raw data: `app.gazeUI.dataset`. **unit** only; **no real eyes have been measured yet** (see Known issues).
 
-**Tests.** 121 Node tests (120 pass) and 38 Python tests pass on `main` (`4921f31`); the landing page adds 12 Node tests (133, 132 pass). Multiplayer logic was mutation-checked. The two-browser e2e passed on the integrated `main`.
+**Mouse fallback.** `?tracker=mouse` (`web/mouse-tracker.js`): the cursor is gaze (the `pointer` source) and a right hand drawn under it (thumb-index midpoint exactly at the cursor, so pressing never nudges a grab); the left button on the scene pinches; right-click locks the pointer for mouse-look. It sends normal tracker frames, so everything downstream and the other laptop are unchanged. **unit + e2e** (a click-drag moves a block and the host sees it).
+
+**Scene sync scaling.** See Protocol. Verified by unit tests (60-assembly scene reconstructed by a joiner, poses-only steady state, bounded acks and tombstones, spec owed until delivered) and the e2e (a reloaded guest rebuilds a voice object); mutation-checked. The relay limit is tested for a 3 MiB pass-through and an over-limit close.
+
+**Tests.** 134 Node tests and 47 Python tests pass before the landing page (which adds 12 Node tests), and the two-browser e2e (`tests/e2e/run.py`) passes locally. Multiplayer logic, grip grace, gaze validation, scene-sync scaling and the mouse fallback were mutation-checked.
 
 ## Known issues and verification debt (most important first)
 1. **Nothing has run live.** Not on two real laptops, not with real eyes, not with a real head turn. The head-rotation sign in `headQuaternion` is derived from the tracker's conventions and unit-tested, not checked on a real head (if the avatar turns the wrong way, fix it in that one function).
-2. **Failing test on `main`.** `tests/gaze-validation.test.mjs` "UI records calibration and held-out frames…" fails: it calls `GazeUI.start(mode)`, `ui.targets` and `ui.dataset`, which `web/gaze-ui.js` doesn't have. The helper module landed without its UI. Either wire it in (planned) or remove the test.
-3. **Grip grace drift.** After a fast carry the 0.5 s grace keeps the block following the hand even though the fingers opened. In simulation the block drifted back about 0.26 m after a normal stop, and followed the hand for metres if the hand kept moving. This is the "block moves when I let go" complaint again. A release margin relative to the tightest squeeze was tried earlier and reverted because grips dropped easily; do not retry it.
-4. **Scene size and bandwidth.** The host sends every assembly's full spec in each 10 Hz `scene`, `deleted` and `acks` grow without bound, and the relay uses the default 1 MiB WebSocket message limit, so a large scene would drop the connection. This blocks sets (below).
-5. **Gaze accuracy is unmeasured and probably too coarse.** A 0.4 m block is about as big as the error (see "Gaze quality options").
-6. **Host reload resets the scene.** The host's scene is in memory only.
-7. **Panels and hands.** The wide controls panel covers the far user's head at the top of the screen. The other user's hands are drawn near their body with no line to the object they hold.
-8. **Voice depends on internet and `MODEL_API_KEY`** and has no offline fallback.
-9. **Process.** The e2e script is outside the repo, there is no CI, and the README status table drifts from this file.
+2. **Gaze accuracy is unmeasured and probably too coarse.** The Validate gaze run now exists, so the next step is to run it on a real person. A 0.4 m block is about as big as the error (see "Gaze quality options").
+3. **Grip grace residual.** The block now holds still once the open pinch is detected, but the last 1–2 frames of finger opening before the pinch crosses `OPEN` (plus the hand smoothing lag) can still nudge it a little. The only fix left is a short position-history rewind, not a release margin.
+4. **Host reload resets the scene.** The host's scene is in memory only.
+5. **Panels and hands.** The wide controls panel covers the far user's head at the top of the screen. The other user's hands are drawn near their body with no line to the object they hold.
+6. **Voice depends on internet and `MODEL_API_KEY`** and has no offline fallback.
+7. **Process.** There is no CI (the suites are run by hand), and the README status table drifts from this file.
 
 ## Planned work
 Ordered by dependency and ease, with no dates. Each item says why, where and when it is done.
 
-### A. Foundations (do these before sets)
-1. **Fix the failing gaze-validation test and wire validation into the UI.** *Why:* a red test on `main`, and gaze accuracy is the biggest unknown. *Where:* `web/gaze-ui.js` (`start(mode)`, `targets`, `dataset`, held-out dots from `gaze-validation.js`), a status line for mean/p90. *Done when:* the test passes, and a real run prints an error figure.
-2. **Fix the grip grace.** *Why:* known drift. *How:* during the grace freeze the block instead of following the hand, and re-anchor (`grab.start`/`grab.pinch`) when the pinch returns so it doesn't jump. *Where:* `web/interaction.js`. *Done when:* tests cover a normal stop, letting go mid-swing (no movement after the open), and a one-frame flicker (grip survives), and the mutation checks fail when the rule is broken.
-3. **Make scene sync scale.** *Why:* sets add many objects. *How:* send transforms at 10 Hz and assembly specs only when they change or when a peer needs them (on `op`, on a peer's first state, or in a slow separate catalog message); prune `deleted` and `acks`; set a larger `max_size` on the relay as a safety margin. *Where:* `web/sync.js`, `web/net.js`, `relay/relay.py`. *Done when:* a 60-object scene stays well under the message limit and a joiner still reconstructs everything.
-4. **Move the two-browser e2e into the repo** (`tests/e2e/`, no hard-coded paths) and add a CI workflow running the Node and Python suites.
-5. **Wire a mouse-and-click fallback input** (mouse as gaze, click as pinch) so the demo survives a dead camera. The intent layer and the `pointer` gaze source already exist.
+### A. Foundations (done)
+Gaze validation UI, grip grace, scene-sync scaling, the in-repo e2e, and the mouse fallback are implemented (see Implemented). Sets are unblocked.
 
 ### B. Sets
 **What.** A set changes the world around you: ground, sky, lighting, fog, ambient effects, spawn points, and its own pool of **grabbable props**. The host switches it and both users see the same set. **On a switch, every scene object is erased completely** (starter blocks, voice objects, props).
@@ -187,7 +187,7 @@ Ordered by dependency and ease, with no dates. Each item says why, where and whe
 - **Budgets.** About 24 grabbable props per set; scenery through `InstancedMesh`; show draw calls and triangles (`renderer.info`) in the dev overlay; keep 60 fps. Props must be roughly block-sized or larger because gaze targeting is coarse.
 - **Placement.** `Objects.place` must respect each set's `placement` zone and colliders so a voice object never lands inside a building.
 - **Switch UI.** A picker panel, a hotkey, and a voice command ("take us to the forest").
-- **Depends on** A3 (scene sync scaling) and the library below (what replaces erased objects).
+- **Depends on** the library below (what replaces erased objects). Scene sync scaling is done: props send transforms only, and recipes ride along when new or when a peer joins.
 - **Done when:** registry validity tests (every spec passes `validAssembly`, budgets respected), deterministic build (same seed, same transforms), a switch erases everything on both laptops, stale-epoch messages are dropped, a late joiner gets the set, and the e2e covers a switch.
 
 ### C. Object library
@@ -230,7 +230,7 @@ Ordered by dependency and ease, with no dates. Each item says why, where and whe
 - **Presence:** emotes (a wave from tracked hand motion, number keys), gaze-direction hints for the other user, name tags.
 - **Resilience:** scene autosave and restore, host migration, reconnect banner, offline library fallback (see C).
 - **Capture:** a photo mode for the demo.
-- **Testing:** recorded tracker sessions for replay tests, the e2e and CI from A4, a Python 3.13/3.14 note in the README (a committed `.pyc` revealed teammates on different versions).
+- **Testing:** recorded tracker sessions for replay tests, the e2e from A4, a Python 3.13/3.14 note in the README (a committed `.pyc` revealed teammates on different versions).
 - **Gestures:** two-hand scale/rotate; palm-up to open the library.
 - **Visual extras** (bloom, fireflies, set weather) only if the 60 fps budget allows.
 

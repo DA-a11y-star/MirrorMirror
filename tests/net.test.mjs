@@ -58,6 +58,21 @@ test('validates the scene contract', () => {
   assert.equal(validScene(state()), false);
 });
 
+test('a scene may carry assembly poses without recipes, but never a malformed pose or an oversized list', () => {
+  const pose = (extra = {}) => ({ id: 'generated-a', kind: 'assembly', pos: [0, 0, 0], quat: [0, 0, 0, 1], scale: [1, 1, 1], ...extra });
+  const withObjects = (...objects) => ({ ...scene(), objects });
+  assert.equal(validScene(withObjects(pose())), true);
+  for (const bad of [{ pos: [0, 0, NaN] }, { quat: [0, 0, 0, 0] }, { scale: [0, 1, 1] }, { scale: [1, 1] }, { scale: undefined }, { id: '' }]) {
+    assert.equal(validScene(withObjects(pose(bad))), false, JSON.stringify(bad));
+  }
+  assert.equal(validScene(withObjects(pose({ spec: { version: 1, id: 'generated-a', name: 'x', position: [0, 0, 0], quaternion: [0, 0, 0, 1], parts: [] } }))), false,
+    'a recipe that is present is still fully checked');
+  const ids = n => Array.from({ length: n }, (_, i) => `id-${i}`);
+  assert.equal(validScene({ ...scene(), deleted: ids(256), acks: ids(256) }), true);
+  assert.equal(validScene({ ...scene(), deleted: ids(257) }), false);
+  assert.equal(validScene({ ...scene(), acks: ids(257) }), false);
+});
+
 test('passes valid messages from other users and drops echoes, junk and unknown types', t => {
   const s = setup(t), socket = s.sockets[0];
   socket.open();

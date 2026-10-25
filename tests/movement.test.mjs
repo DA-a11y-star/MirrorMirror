@@ -269,7 +269,7 @@ function fakeEvent(type, target) {
   Object.defineProperty(e, 'target', { value: target });
   return e;
 }
-async function makeInput() {
+async function makeInput(options = {}) {
   class FakeElement extends EventTarget { requestPointerLock() { this.lockRequested = true; } closest() { return null; } }
   globalThis.HTMLElement = FakeElement;
   globalThis.HTMLButtonElement = class extends FakeElement {};
@@ -279,7 +279,7 @@ async function makeInput() {
   const { Input, emptyIntents, MOUSE_SENSITIVITY } = await load('input');
   const target = new EventTarget();
   const canvas = new FakeElement();
-  const input = new Input(canvas, { target });
+  const input = new Input(canvas, { target, ...options });
   const key = (type, code, extra = {}) => {
     const e = Object.assign(fakeEvent(type, canvas), { code, repeat: false, preventDefault() { this.prevented = true; } }, extra);
     target.dispatchEvent(e);
@@ -350,6 +350,16 @@ test('input: mouse look only while pointer-locked; scroll becomes zoom', async (
   assert.equal(input.poll().look.dYaw, 0, 'deltas are consumed');
   target.dispatchEvent(Object.assign(fakeEvent('wheel', canvas), { deltaY: 200, deltaMode: 0, preventDefault() {} }));
   assert.equal(input.poll().zoom, 2);
+});
+
+test('input: with the mouse fallback the left click is a pinch, so only a right-click locks the pointer', async () => {
+  const { canvas } = await makeInput({ mouseFallback: true });
+  canvas.dispatchEvent(new Event('click'));
+  assert.equal(canvas.lockRequested, undefined, 'a left click must not steal the cursor from the pinch');
+  const menu = Object.assign(new Event('contextmenu'), { preventDefault() { this.prevented = true; } });
+  canvas.dispatchEvent(menu);
+  assert.ok(canvas.lockRequested);
+  assert.ok(menu.prevented, 'no browser menu over the scene');
 });
 
 test('input: voice buttons retain focus and own recording keys and scrolling', async () => {
