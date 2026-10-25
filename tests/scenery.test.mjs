@@ -12,7 +12,7 @@ async function load(name, imports = {}) {
   return { module: await import(dataUrl(source)), url: dataUrl(source) };
 }
 const scenery = await load('scenery');
-const { fitScenery, prepareScenery, sceneryStats } = scenery.module;
+const { fitScenery, prepareScenery, chunkScenery, sceneryStats } = scenery.module;
 const { SETS } = (await load('sets', { scenery: scenery.url })).module;
 
 // A lopsided model: a tall box off to one side and a low slab, offset from the origin and sunk below the ground.
@@ -93,15 +93,53 @@ test('sceneryStats counts triangles, meshes and distinct materials', () => {
   assert.deepEqual(sceneryStats(model()), { triangles: 24, meshes: 2, materials: 2 });
 });
 
+test('chunkScenery splits a model into cells that keep every triangle and the exact placement', () => {
+  const root = model();
+  const material = root.children[0].material;
+  fitScenery(root, { scale: 3, center: [1, 2] }); // the root itself is scaled and moved: cells must still land in place
+  const before = new THREE.Box3().setFromObject(root);
+  const trianglesBefore = sceneryStats(root).triangles;
+  const cells = chunkScenery(root, 5);
+  const stats = sceneryStats(root);
+  assert.equal(stats.triangles, trianglesBefore, 'no triangle lost or duplicated');
+  assert.ok(cells.length > 2, `the big slab and the tower split into several cells (${cells.length})`);
+  assert.ok(cells.every(cell => cell.isMesh && cell.geometry.boundingSphere), 'each cell has bounds to cull with');
+  const whole = before.getBoundingSphere(new THREE.Sphere()).radius;
+  assert.ok(cells.every(cell => cell.geometry.boundingSphere.radius < whole), 'every cell is smaller than the model');
+  assert.ok(cells.some(cell => cell.material === material), 'materials are kept, not copied');
+  root.updateMatrixWorld(true);
+  const after = new THREE.Box3().setFromObject(root);
+  for (const key of ['min', 'max']) for (const axis of 'xyz') assert.ok(Math.abs(after[key][axis] - before[key][axis]) < 1e-4, `${key}.${axis} ${after[key][axis]} vs ${before[key][axis]}`);
+  const normal = cells[0].geometry.attributes.normal;
+  assert.ok(Math.abs(new THREE.Vector3().fromBufferAttribute(normal, 0).length() - 1) < 1e-4, 'normals stay unit length');
+  const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 6); // far plane 6 m: only nearby cells survive
+  camera.position.set(-40, 5, 2);
+  camera.lookAt(1, 2, 2);
+  camera.updateMatrixWorld(true);
+  const frustum = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+  assert.ok(cells.every(cell => !frustum.intersectsObject(cell)), 'cells beyond the far plane are culled');
+});
+
 test('every set with a model points at a valid .glb in web/, with a credit, a sane scale and a clear workspace', async () => {
   const credits = await readFile(new URL('../web/assets/CREDITS.md', import.meta.url), 'utf8');
   for (const [id, set] of Object.entries(SETS)) {
     assert.equal(typeof set.name, 'string', id);
     if (!set.model) continue;
     assert.ok(set.scale > 0 && set.scale <= 20, `${id} scale ${set.scale}`);
+    assert.ok(!set.chunk || set.chunk >= 8, `${id} chunk size`);
+    assert.ok(!set.bound || set.bound >= 20, `${id} bound`);
     assert.ok(set.center.length === 2 && set.center.every(Number.isFinite), `${id} center`);
     assert.ok(!set.workspace || (set.workspace.length === 2 && set.workspace.every(Number.isFinite)), `${id} workspace`);
     assert.match(set.credit, /CC|licen/i, `${id} must credit its model`);
+    for (const [name, part] of Object.entries(set.props ?? {})) {
+      if (!part.model) continue; // Wall-E has none: it is built from primitives
+      assert.ok(credits.includes(part.model.split('/').pop()), `${name}'s model ${part.model} is missing from web/assets/CREDITS.md`);
+      const bytes = await readFile(new URL(`../web/${part.model}`, import.meta.url));
+      assert.equal(bytes.toString('utf8', 0, 4), 'glTF', `${part.model} is not a GLB`);
+      const json = JSON.parse(bytes.toString('utf8', 20, 20 + bytes.readUInt32LE(12)));
+      assert.ok(!(json.extensionsRequired ?? []).length, `${part.model} needs extensions the loader may lack`);
+      assert.match(json.asset?.extras?.license ?? '', /CC-BY/, `${part.model} should carry its license`);
+    }
     const folder = set.model.split('/').slice(0, -1).join('/');
     assert.ok(credits.includes(folder.split('/').pop() + '/'), `${folder} is missing from web/assets/CREDITS.md`);
     const file = new URL(`../web/${set.model}`, import.meta.url);

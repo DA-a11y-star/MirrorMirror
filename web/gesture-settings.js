@@ -8,6 +8,11 @@ const AXES = [
   { group: 'Look hand', label: 'Turn', full: 'FULL_LOOK_LATERAL', dead: 'DEAD_LOOK_LATERAL', deadMax: 0.6 },
   { group: 'Look hand', label: 'Pitch', full: 'FULL_LOOK_VERTICAL', dead: 'DEAD_LOOK_VERTICAL', deadMax: 0.6 },
 ];
+// The controls help: shown at the top of the Settings panel, not on the screen all the time.
+const HELP = `
+  <p><b>Gestures.</b> MOVE: right palm = move (forward/back, left/right, up/down). Left palm = look (up/down, left/right). One fist recenters that stick. Double-fist then both open switches to EDIT. In EDIT, pinch a block with both hands and spread them to resize it. Hold one fist to talk: “mirror mirror, make a …”.</p>
+  <p><b>No camera?</b> Open with <code>?tracker=mouse</code>: the cursor is your gaze and hand, hold the left button to pinch, right-click to mouse-look.</p>
+  <p><b>Keys.</b> ↑↓ forward · ←→ turn · A/D strafe · Space/Shift up/down · M mode · V view · C free cam · P depth · R respawn · \` dev. Click the scene to mouse-look (Esc releases).</p>`;
 const KEY = 'gestureSettings2'; // v2: defaults already include the tuned sensitivity, so old saved multipliers must not stack
 const MIN_SPAN = 0.05; // FULL stays at least this far above DEAD so the axis can still reach full speed
 
@@ -71,6 +76,10 @@ export class GestureSettings {
     root.id = 'gesture-settings';
     root.innerHTML = `<button id="gs-toggle" aria-expanded="false" title="Gesture settings">⚙ Settings ▾</button><div id="gs-panel" hidden></div>`;
     const panel = root.querySelector('#gs-panel');
+    const help = document.createElement('div');
+    help.className = 'gs-help';
+    help.innerHTML = HELP;
+    panel.appendChild(help);
     const rows = [];
     let group = null;
     for (const a of AXES) {
@@ -103,8 +112,10 @@ export class GestureSettings {
     const style = document.createElement('style');
     style.textContent = `
       #gesture-settings { position: fixed; top: 10px; right: 12px; z-index: 5; font: 13px/1.4 system-ui, sans-serif; color: #24334a; text-align: right; }
-      #gs-panel { margin-top: 6px; width: 280px; text-align: left; background: rgba(255,255,255,.95); border: 1px solid #cdd4df; border-radius: 12px; padding: 8px 14px 12px; }
+      #gs-panel { margin-top: 6px; width: 320px; max-height: calc(100vh - 60px); overflow-y: auto; text-align: left; background: rgba(255,255,255,.95); border: 1px solid #cdd4df; border-radius: 12px; padding: 8px 14px 12px; }
       #gs-panel h4 { margin: 8px 0 2px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #617087; }
+      .gs-help p { margin: 6px 0; font-size: 12px; color: #617087; }
+      .gs-help code { font-size: 11px; }
       .gs-row { padding: 4px 0; border-bottom: 1px solid #e6eaf0; }
       .gs-name { font-weight: 600; }
       .gs-row label { display: grid; grid-template-columns: 78px 1fr 40px; align-items: center; gap: 6px; font-size: 12px; }

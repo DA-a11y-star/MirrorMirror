@@ -13,7 +13,8 @@ export function validAssembly(spec) {
   for (const part of spec.parts) {
     if (!part || !id(part.id) || ids.has(part.id) || !['box', 'sphere', 'cylinder', 'cone'].includes(part.shape) ||
         !finite(part.size, 3) || !part.size.every(v => v > 0 && v <= 10) || !finite(part.position, 3) ||
-        !rotation(part.quaternion) || typeof part.color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(part.color)) return false;
+        !rotation(part.quaternion) || typeof part.color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(part.color) ||
+        (part.emissive !== undefined && (typeof part.emissive !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(part.emissive)))) return false;
     ids.add(part.id);
   }
   return true;
@@ -25,7 +26,7 @@ export function renderSpec(spec) {
   return {
     version: 1, id: spec.id, name: spec.name, position: [...spec.position], quaternion: [...spec.quaternion],
     parts: spec.parts.map(p => ({ id: p.id, shape: p.shape, size: [...p.size], position: [...p.position],
-      quaternion: [...p.quaternion], color: p.color })),
+      quaternion: [...p.quaternion], color: p.color, ...(p.emissive ? { emissive: p.emissive } : {}) })),
   };
 }
 

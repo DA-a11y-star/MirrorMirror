@@ -22,7 +22,10 @@ export const smoothing = (rate, dt) => 1 - Math.exp(-rate * dt);
 
 export class Locomotion {
   // `spawn` is where (re)spawning puts the avatar: { pos: [x, y, z], yaw, pitch }. Defaults to the origin.
-  constructor({ spawn = {} } = {}) {
+  // `bound` is the half size of the square the avatar stays in and `ceiling` its highest altitude (a big set raises both).
+  constructor({ spawn = {}, bound = WORLD_BOUND, ceiling = FLY_CEILING } = {}) {
+    this.bound = bound;
+    this.ceiling = ceiling;
     this.spawn = { pos: [0, 0, 0], yaw: 0, pitch: 0, ...spawn };
     this.pos = new THREE.Vector3();
     this.vel = new THREE.Vector3();
@@ -78,8 +81,8 @@ export class Locomotion {
 
     const wasY = this.pos.y;
     this.pos.addScaledVector(this.vel, dt);
-    this.pos.x = THREE.MathUtils.clamp(this.pos.x, -WORLD_BOUND, WORLD_BOUND);
-    this.pos.z = THREE.MathUtils.clamp(this.pos.z, -WORLD_BOUND, WORLD_BOUND);
+    this.pos.x = THREE.MathUtils.clamp(this.pos.x, -this.bound, this.bound);
+    this.pos.z = THREE.MathUtils.clamp(this.pos.z, -this.bound, this.bound);
     // Never below the floor under you. `floorAt(x, z)` (set by the world) knows about decks and raised paths. Stepping
     // onto a higher floor lifts you smoothly; pressing down into a floor you are already on just stops at it.
     this.pos.y = Math.max(this.pos.y, 0);
@@ -93,7 +96,7 @@ export class Locomotion {
       this.pos.y = this.pos.y - floor < 0.004 ? floor : this.pos.y + (floor - this.pos.y) * smoothing(12, dt);
     }
     this.grounded = this.pos.y <= floor + 0.01;
-    this.pos.y = Math.min(this.pos.y, FLY_CEILING);
+    this.pos.y = Math.min(this.pos.y, this.ceiling);
     return this;
   }
 
