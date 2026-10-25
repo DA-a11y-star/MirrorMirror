@@ -45,7 +45,7 @@ tests/     Node (*.test.mjs) and Python (test_*.py); tests/e2e/run.py is the two
 README.md, MOVEMENT_CAMERA.md (the movement/camera task spec), GESTURE_UX.md (the gesture task spec)
 hand_landmarker.task, face_landmarker.task (MediaPipe models, committed so venue Wi-Fi isn't needed)
 ```
-Planned new files are listed under Planned work (`web/sets/`, `web/library.js`, `web/gait.js`, ...).
+Planned new files are listed under Planned work (`web/library.js`, `web/gait.js`, ...). `sets.js` and `scenery.js` exist; later sets may need a `web/sets/` folder.
 
 ## Running
 ```
@@ -124,6 +124,7 @@ Verification legend: **unit** = Node/Python tests, **sim** = scripted simulation
 | 5 | Relay and second user | Implemented (unit + e2e). Not tried on two real laptops or with a real head turn |
 | 6 | Depth effect | Implemented by a teammate (unit); composes with the movement camera; untuned on a real person |
 | 7 | Voice-to-object | Implemented and shared through the relay (unit, live API smoke check by its author); real-user rehearsal pending |
+| B1 | Sets, first slice | Cyberpunk city as scenery via `?set=cyberpunk` (unit + e2e); no in-app switching, host sync or epoch; not judged on a real display |
 | 8 | Polish | 8a partly done (see below), 8b and 8c not started |
 
 ### Implemented, in detail
@@ -185,7 +186,7 @@ Verification legend: **unit** = Node/Python tests, **sim** = scripted simulation
 Ordered by dependency and ease, with no dates. Each item says why, where and when it is done.
 
 ### A. Foundations (done)
-Gaze validation UI, grip grace, scene-sync scaling, the in-repo e2e, and the mouse fallback are implemented (see Implemented). Sets are unblocked.
+Gaze validation UI, grip grace, scene-sync scaling, the in-repo e2e, and the mouse fallback are implemented (see Implemented). Sets are unblocked; the first slice is in.
 
 ### B. Sets
 **What.** A set changes the world around you: ground, sky, lighting, fog, ambient effects, spawn points, and its own pool of **grabbable props**. The host switches it and both users see the same set. **On a switch, every scene object is erased completely** (starter blocks, voice objects, props).
