@@ -131,7 +131,7 @@ export class GazeInput {
   }
 
   reset() {
-    this.raw = this.output = null;
+    this.raw = this.output = this.head = null;
     this.lastTimestamp = null;
     this.lastReceived = -Infinity;
     this.history = [];
@@ -163,6 +163,7 @@ export class GazeInput {
     this.lastTimestamp = t;
     this.lastReceived = now;
     this.raw = gaze;
+    this.head = frame.head ?? null; // kept so validation runs can snapshot head pose beside each gaze sample
     let point;
     if (this.source === 'webcam') {
       if (gaze.source !== 'webcam' || !Array.isArray(gaze.features) || gaze.features.length !== FEATURE_COUNT || !gaze.features.every(Number.isFinite)) {

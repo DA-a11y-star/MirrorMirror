@@ -27,24 +27,31 @@ function pinchAmount(t) {
   return ramp(0.45, 0.55) - ramp(0.85, 0.95);
 }
 
-function posedHand(spec, t) {
-  const pinch = pinchAmount(t + spec.phase);
-  const pts = OPEN_LEFT.map(([x, y, z]) => new THREE.Vector3(x * spec.mirror, y, z));
+// An open hand with the thumb and index tips closed `pinch` (0..1) toward their midpoint, turned by `euler`.
+// Webcam-space meters, wrist at the origin; the caller positions it. `mirror` is 1 for a left hand, -1 for a right.
+export function poseHand(mirror, pinch, euler = [0, 0, 0]) {
+  const pts = OPEN_LEFT.map(([x, y, z]) => new THREE.Vector3(x * mirror, y, z));
 
   // Pinch: thumb and index tips (and, less, the joints below them) close on their midpoint.
   const mid = pts[4].clone().add(pts[8]).multiplyScalar(0.5);
   for (const [i, w] of [[4, 1], [8, 1], [3, 0.4], [7, 0.4]]) pts[i].lerp(mid, pinch * w * 0.92);
 
-  const turn = new THREE.Matrix4().makeRotationFromEuler(
-    new THREE.Euler(0.25 * Math.sin(t * 0.5 + spec.phase), 0.35 * Math.sin(t * 0.6 + spec.phase), 0.2 * Math.sin(t * 0.8 + spec.phase)),
-  );
+  const turn = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...euler));
+  return pts.map((p) => p.applyMatrix4(turn));
+}
+
+function posedHand(spec, t) {
+  const pinch = pinchAmount(t + spec.phase);
+  const pts = poseHand(spec.mirror, pinch, [
+    0.25 * Math.sin(t * 0.5 + spec.phase), 0.35 * Math.sin(t * 0.6 + spec.phase), 0.2 * Math.sin(t * 0.8 + spec.phase),
+  ]);
   const [hx, hy, hz] = spec.home;
   const offset = new THREE.Vector3(
     hx + 0.04 * Math.sin(t * 0.7 + spec.phase),
     hy + 0.03 * Math.sin(t * 1.1 + spec.phase),
     hz + 0.06 * Math.sin(t * 0.45 + spec.phase),
   );
-  const lm = pts.map((p) => p.applyMatrix4(turn).add(offset).toArray().map((v) => +v.toFixed(4)));
+  const lm = pts.map((p) => p.add(offset).toArray().map((v) => +v.toFixed(4)));
   const palm = {
     x: +(0.5 + spec.home[0] + 0.08 * Math.sin(t * 0.7 + spec.phase)).toFixed(4),
     y: +(0.5 + spec.home[1] * 0.4 + 0.04 * Math.sin(t * 1.1 + spec.phase)).toFixed(4),

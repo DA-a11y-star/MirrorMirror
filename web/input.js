@@ -41,8 +41,9 @@ function isTyping(target) {
 }
 
 export class Input {
-  // `element` is the canvas: clicking it requests pointer lock for mouse look.
-  constructor(element, { target = window } = {}) {
+  // `element` is the canvas: clicking it requests pointer lock for mouse look. With `mouseFallback` the left button
+  // is a pinch (see mouse-tracker.js), so only a right-click locks the pointer.
+  constructor(element, { target = window, mouseFallback = false } = {}) {
     this.element = element;
     this.held = new Set();
     this.pressed = new Set();
@@ -62,7 +63,8 @@ export class Input {
       this.wheel += e.deltaY / unit;
     }, { passive: false });
 
-    element.addEventListener('click', () => {
+    element.addEventListener(mouseFallback ? 'contextmenu' : 'click', e => {
+      if (mouseFallback) e.preventDefault();
       if (!this.locked) element.requestPointerLock?.();
     });
     document.addEventListener('pointerlockchange', () => {

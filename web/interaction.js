@@ -184,6 +184,7 @@ export class Interaction {
       const slot = this.hands.slots.find(slot => slot.side === side);
       const speed = slot?.velocity?.[9]?.length() ?? 0;
       if (enabled && pinched.has(side)) {
+        if (grab.openSince !== null) grab.reanchor = true; // the pinch came back inside the grace
         grab.openSince = null;
         if (speed >= FAST_SPEED) grab.fastAt = now;
         continue;
@@ -210,6 +211,14 @@ export class Interaction {
       }
       const grab = this.grabs.get(hand.side);
       if (!grab || hand.held) continue; // freeze exactly during a brief tracking hold
+      // The grace keeps the grab alive across a flicker; it must not keep following an open hand.
+      if (grab.openSince !== null) continue;
+      if (grab.reanchor) { // pinch returned: rebuild the offset from where the block now is, so it doesn't jump
+        grab.mesh.getWorldPosition(grab.start);
+        grab.pinch.copy(this.pinch);
+        grab.reanchor = false;
+        continue;
+      }
       if (!grab.learned && now - grab.startedAt >= LEARN_HOLD) {
         grab.learned = true;
         if (grab.learnable && grab.rect) this.onLearn?.({ rect: grab.rect, at: grab.startedAt, now, aspect: this.gazeCamera.aspect });

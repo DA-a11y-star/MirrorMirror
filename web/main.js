@@ -6,6 +6,7 @@ import { OffAxis } from './offaxis.js';
 import { Hands } from './hands.js';
 import { Net } from './net.js';
 import { startMockTracker } from './mock.js';
+import { startMouseTracker } from './mouse-tracker.js';
 import { createRenderer, createScene, SPAWNS } from './scene.js';
 import { startTracker } from './tracker.js';
 import { GazeInput } from './gaze.js';
@@ -31,7 +32,7 @@ const hands = new Hands(scene);
 // moved with their head and rendered through an off-axis frustum.
 const offAxis = new OffAxis(camera, PARALLAX_STRENGTH);
 const view = offAxis.view;
-const gaze = new GazeInput(TRACKER_SOURCE === 'mock' ? 'pointer' : GAZE_SOURCE);
+const gaze = new GazeInput(TRACKER_SOURCE === 'mock' || TRACKER_SOURCE === 'mouse' ? 'pointer' : GAZE_SOURCE);
 const interaction = new Interaction(blocks, camera, hands, view, { onLearn: sample => gaze.learn(sample) });
 const gazeUI = new GazeUI(gaze, () => interaction.releaseAll());
 const objects = new Objects(blocks, interaction);
@@ -42,12 +43,14 @@ const voiceUI = new VoiceUI(VOICE_URL, objects);
 window.app = { renderer, scene, camera, view, hands, blocks, interaction, gaze, gazeUI, offAxis, sync, peers, objects, voiceUI }; // dev console
 
 // Avatar, camera rig and input. Keys and mouse are read only in input.js; everything below consumes intents.
-const input = new Input(renderer.domElement);
+const input = new Input(renderer.domElement, { mouseFallback: TRACKER_SOURCE === 'mouse' });
 // Each user spawns at their own end of the blocks, a few steps back, looking down at them.
 const locomotion = new Locomotion({ spawn: SPAWNS[USER_ID] ?? SPAWNS.A });
 const avatar = new Avatar(scene);
 const rig = new CameraRig(camera);
 const gestures = new Gestures(GESTURE);
+// The mouse is the pinch and there are no palms to steer with, so start where pinch grabs (M still toggles).
+if (TRACKER_SOURCE === 'mouse') gestures.mode = 'EDIT';
 const gestureUI = new GestureUI(gestures);
 const dev = new Dev(scene, blocks);
 let depthFx = true;
@@ -81,6 +84,9 @@ let stopTracker;
 if (TRACKER_SOURCE === 'mock') {
   tracker.status = 'mock';
   stopTracker = startMockTracker(onTrackerMessage);
+} else if (TRACKER_SOURCE === 'mouse') {
+  tracker.status = 'mouse';
+  stopTracker = startMouseTracker(onTrackerMessage, camera, renderer.domElement);
 } else if (TRACKER_SOURCE === 'websocket') {
   stopTracker = startTracker(TRACKER_URL, onTrackerMessage, status => {
     tracker.status = status;
@@ -200,7 +206,7 @@ renderer.setAnimationLoop(() => {
     net.send(buildState(heldIds()));
   }
   const snapshot = sync.sceneSnapshot(now);
-  if (snapshot) net.send(snapshot);
+  if (snapshot) sync.sceneSent(net.send(snapshot));
 
   frames++;
   if (now - lastHud > 500) {

@@ -118,6 +118,51 @@ test('a fast carry survives a momentary open-pinch reading, but a sustained one 
   assert.match(s.interaction.lastEnd, /pinch opened/);
 });
 
+// A fast carry (~2 m/s), then returns the block position at the last frame the pinch was still closed.
+function fastCarry() {
+  const s = setup();
+  s.look();
+  let t = 0;
+  const moving = (pinching, x) => ({ ...hand(pinching, x), t: (t += .05) });
+  s.step([moving(true, 0)]);
+  for (let x = .1; x < .5; x += .1) s.step([moving(true, x)]);
+  assert.equal(s.interaction.grabs.size, 1);
+  return { ...s, moving, closed: s.block.position.clone() };
+}
+
+test('after a fast carry stops and the fingers open, the block stays put through the grace and the release', () => {
+  const s = fastCarry();
+  for (let i = 0; i < 5; i++) { // the hand drifts while open; the block must not follow it
+    s.step([s.moving(false, .5 - i * .05)]);
+    assert.equal(s.interaction.grabs.size, 1, 'still inside the grace');
+    assert.ok(s.block.position.distanceTo(s.closed) < 1e-10, `block moved during the grace at step ${i}`);
+  }
+  s.step([s.moving(false, .2)]);
+  assert.equal(s.interaction.grabs.size, 0);
+  assert.ok(s.block.position.distanceTo(s.closed) < 1e-10, 'release does not move the block');
+});
+
+test('letting go mid-swing does not move the block after the open, even though the hand keeps moving', () => {
+  const s = fastCarry();
+  for (let x = .5; x < 1; x += .1) { // hand keeps travelling at ~2 m/s with the fingers open
+    s.step([s.moving(false, x)]);
+    assert.ok(s.block.position.distanceTo(s.closed) < 1e-10, `block followed the open hand to x=${x.toFixed(1)}`);
+  }
+});
+
+test('a one-frame flicker keeps the grip, does not jump the block, and following resumes', () => {
+  const s = fastCarry();
+  s.step([s.moving(false, .5)]); // pinch reads open for one frame
+  assert.ok(s.block.position.distanceTo(s.closed) < 1e-10);
+  s.step([s.moving(true, .6)]); // pinch returns with the hand 0.2 further along
+  assert.equal(s.interaction.grabs.size, 1);
+  assert.equal(s.interaction.grabs.get('right').openSince, null);
+  assert.ok(s.block.position.distanceTo(s.closed) < 1e-10, 'no jump on the frame the pinch returns');
+  s.step([s.moving(true, .7)]);
+  const advance = s.block.position.x - s.closed.x;
+  assert.ok(advance > .2 && advance < 1.5, `block follows the hand again (moved ${advance.toFixed(2)} m)`);
+});
+
 test('a fast carry that loses the hand entirely still releases right away', () => {
   const s = setup();
   s.look();

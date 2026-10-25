@@ -21,7 +21,7 @@ def load_env(path=ENV_PATH):
         return values
     for line in lines:
         line = line.strip()
-        if not line or "=" not in line:
+        if not line or line.startswith("#") or "=" not in line:
             continue
         name, _, value = line.removeprefix("export ").partition("=")
         value = value.strip()

@@ -1,6 +1,6 @@
 // Multiplayer transport. The relay forwards every message to the other laptops and keeps no state, so this file
 // owns the message envelope and checks everything another laptop sends before the rest of the app sees it.
-import { MAX_OBJECTS, validAssemblyObject } from './object-protocol.js';
+import { MAX_OBJECTS, MAX_SCENE_LIST, validAssemblyObject, validAssemblyTransform } from './object-protocol.js';
 const RETRY_MS = 1000;
 const MAX_BUFFERED = 1 << 20; // bytes; a state snapshot that would queue behind a stalled link is dropped, not delayed
 
@@ -21,13 +21,18 @@ export function validState(msg) {
   return Array.isArray(msg.held) && msg.held.length <= 16 && msg.held.every(pose);
 }
 
+const idList = list => list == null ||
+  (Array.isArray(list) && list.length <= MAX_SCENE_LIST && list.every(id => typeof id === 'string'));
+
+// An assembly may arrive without its `spec` (pose only); peers that already know the object just move it.
+const sceneObject = o => pose(o) && (o.kind !== 'assembly' || (o.spec == null ? validAssemblyTransform(o) : validAssemblyObject(o)));
+
 export function validScene(msg) {
   return !!msg && msg.type === 'scene' && typeof msg.user === 'string' && Number.isFinite(msg.seq) &&
     Array.isArray(msg.objects) && msg.objects.length <= MAX_OBJECTS &&
-    msg.objects.every(o => pose(o) && (o.kind !== 'assembly' || validAssemblyObject(o))) &&
+    msg.objects.every(sceneObject) &&
     new Set(msg.objects.map(o => o.id)).size === msg.objects.length &&
-    (msg.deleted == null || (Array.isArray(msg.deleted) && msg.deleted.every(id => typeof id === 'string'))) &&
-    (msg.acks == null || (Array.isArray(msg.acks) && msg.acks.every(id => typeof id === 'string')));
+    idList(msg.deleted) && idList(msg.acks);
 }
 
 export function validOp(msg) {

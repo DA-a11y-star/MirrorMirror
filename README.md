@@ -11,7 +11,7 @@ A shared 3D block-modeling workspace driven by eyes, hands, and voice, built for
 | 1. Scene with floor, lighting, camera | Done (`web/`) |
 | 2. Tracker streams hands to the browser | Accepted by user: movement and responsiveness are okay; live WebSocket, pinch events and recovery work |
 | 3. Locomotion | Keyboard-driven walking/flying, first/third person, free camera and dev overlay implemented; gesture input remains pending |
-| 4. Gaze highlight, pinch to grab | Implemented, awaiting user review: calibrated webcam gaze (replaceable provider) and local grab-and-move. Tests and a headless-browser run pass; accuracy on real eyes is not yet validated |
+| 4. Gaze highlight, pinch to grab | Implemented, awaiting user review: calibrated webcam gaze (replaceable provider) and local grab-and-move, a **Validate gaze** run that reports held-out error, and a mouse-and-click fallback (`?tracker=mouse`). Tests and a headless-browser run pass; accuracy on real eyes has not been measured yet |
 | 5. Relay and second user | Implemented, awaiting user review: relay, face-to-face avatars with the other user's head and hands, block ownership and scene sync. Unit tests and a two-browser headless run through the real relay pass; not yet tried on two laptops or with a real head |
 | 6. Depth effect | Implemented; composes with the movement camera and follows tracked head position |
 | 7. Voice-to-CAD | Muse transcription → Muse Wonder primitive assemblies, shared through the relay with creation, movement, undo and late-join reconstruction; real-user rehearsal pending |
@@ -43,7 +43,8 @@ web/
   scene.js             Renderer, lights, floor, starter blocks
   hands.js             Hand skeleton rendering and the single tracker -> world mapping
   gaze.js              9-point calibration (ridge regression) and the source-independent gaze input
-  gaze-ui.js           Calibration overlay, gaze reticle, status line
+  gaze-ui.js           Calibration and validation overlay, gaze reticle, status line, error figure
+  gaze-validation.js   Held-out targets, per-frame recording and the mean/p90 error summary
   interaction.js       Gaze targeting, highlight, pinch grab/move/release
   input.js, locomotion.js, camera.js, dev.js
                        Keyboard/mouse intents, walking and flying, first/third person and free cam, dev overlay
@@ -52,6 +53,7 @@ web/
   sync.js              Block ownership and scene sync between the two laptops
   remote-avatar.js     The other user: their walking body, head turn, hands, and what they are looking at
   mock.js              Camera-free tracker for development using the same protocol
+  mouse-tracker.js     Mouse-as-hand fallback (`?tracker=mouse`): cursor is gaze and hand, left button pinches
   objects.js           Primitive assembly rendering, free-space placement, undo and disposal
   object-protocol.js   Validated render-only assembly format for relay operations and scene snapshots
   voice.js             Browser recording, local WAV conversion and voice WebSocket client
@@ -64,6 +66,7 @@ voice/
   schema.py            Model-output schema and validation
   layout.py            Face alignment, repeated corner supports, scaling and grounding
 tests/                 Python and Node tests (see "Milestone 2 checks" and "Milestone 4 checks")
+  e2e/run.py           Two headless Chromes through the real relay (`python tests/e2e/run.py`, needs Chrome)
 ```
 
 
@@ -102,7 +105,8 @@ Open [localhost:8000](http://localhost:8000). `TRACKER_SOURCE = 'websocket'` is 
 1. Size and place the browser window the way you'll use it, sit at your normal distance, and click **Calibrate gaze**.
 2. Follow the dot through its nine positions with your eyes, keeping your head comfortably still. Each point captures automatically (about 1.5 s each). **Esc** cancels. If the fit is inconsistent, the status line says why; fix lighting or posture and retry.
 3. A round reticle follows your gaze. The block nearest to it gets a warm glow (the reticle turns amber). The block doesn't have to be exactly under the reticle: webcam gaze is only good to a few degrees, so targeting is forgiving (see below).
-4. **Pinch** (thumb and index) while a block glows to grab it. Move your hand to move the block, then un-pinch to place it. The block turns teal while held.
+4. **Pinch** (thumb and index) while a block glows to grab it. Move your hand to move the block, then un-pinch to place it. The block turns teal while held. If the pinch flickers open for a moment mid-carry, the block holds still instead of following your open hand, and carries on from where it is when the pinch returns.
+5. To measure how good the gaze is, click **Validate gaze** after calibrating and look at the five dots (none is a calibration point). The panel shows the mean and 90th-percentile error in pixels and in screen heights, and the console prints it too. Validation never changes the calibration. The recorded frames are in `app.gazeUI.dataset` in the dev console.
 
 Interaction details:
 - The block stays exactly where it is when you grab it, and then follows your hand. Hand motion is scaled up by the ratio of the block's depth to your hand's depth (1x to 6x), so you can reach distant blocks.
@@ -141,7 +145,7 @@ The browser reconnects automatically after tracker restarts. A brief detection g
 
 Use `--camera 1` for a different camera or `--port 8767` for a different local port (also update `TRACKER_URL`). Stop the tracker with Ctrl+C.
 
-For camera-free development, set `TRACKER_SOURCE = 'mock'` in `web/config.js`. Two animated hands sway and pinch. While `DEV_ORBIT` is on, drag to orbit, scroll to zoom, and right-drag to pan. `window.app` exposes the renderer, scene, camera, hands and latest tracker frame in the dev console.
+**No camera, or the camera died:** open the page with `?tracker=mouse`. The cursor is your gaze and your hand: hover a block to target it, hold the left button to pinch and drag to move it. Right-click the scene to mouse-look (the left click is the pinch). This mode starts in EDIT, where pinch grabs; **M** switches to MOVE and back. Other users see your hand like any other. For camera-free development with animated hands instead, set `TRACKER_SOURCE = 'mock'` in `web/config.js`. Two animated hands sway and pinch. While `DEV_ORBIT` is on, drag to orbit, scroll to zoom, and right-drag to pan. `window.app` exposes the renderer, scene, camera, hands and latest tracker frame in the dev console.
 
 The target is a steady 60 fps. If a large or high-DPI window drops below that, lower the pixel-ratio cap in `createRenderer()` in `scene.js` from 2 to 1.5.
 
@@ -165,7 +169,7 @@ What each user sees of the other: their walking body (the same avatar you walk w
 Ownership:
 - Whoever grabs a block owns it and streams its position; the other laptop only draws it. A block the other user holds can't be targeted or grabbed until they let go.
 - If both grab the same block in the same instant, the lower user id keeps it (A over B) and the other laptop lets go.
-- Laptop A rebroadcasts every block about 10 times a second, so a laptop that reloads or joins late catches up within a moment. If laptop A reloads, the blocks reset to the starter layout.
+- Laptop A rebroadcasts every block's pose about 10 times a second, and every voice object's recipe when it is new, when a laptop joins or reloads, and every couple of seconds, so a laptop that reloads or joins late catches up within a moment and a large scene stays small on the wire. If laptop A reloads, the blocks reset to the starter layout.
 
 To try it on one laptop, run one relay and one tracker, then open two browser **windows** (not tabs: a background tab stops rendering and sending). Arrow keys only move the window you last clicked. For example `localhost:8000/?user=A&relay=ws://localhost:8765` and `localhost:8000/?user=B&relay=ws://localhost:8765`. Add `&tracker=mock` to either for camera-free animated hands. Both windows can share the one tracker, so both users' hands move together.
 
@@ -180,7 +184,7 @@ If the laptops can't reach each other, some venue Wi-Fi isolates clients from ea
 | `RELAY_URL` | Where the relay is. Defaults to port 8765 on the machine that served the page. Override with `?relay=ws://<address>:8765` in the page URL |
 | `TRACKER_URL` | Local tracker WebSocket, `ws://localhost:8766` |
 | `VOICE_URL` | Local voice WebSocket, `ws://localhost:8767` |
-| `TRACKER_SOURCE` | `'websocket'` for the local Python tracker (default), or `'mock'`. Override with `?tracker=mock` in the page URL |
+| `TRACKER_SOURCE` | `'websocket'` for the local Python tracker (default), `'mock'` for animated hands, or `'mouse'` for the mouse fallback. Override with `?tracker=mouse` in the page URL |
 | `GAZE_SOURCE` | `'webcam'` (calibrated iris features, default), `'external'` (tracker-provided screen coordinates), or `'pointer'` (mouse, development). Ignored in mock mode, which always uses the pointer |
 | `DEV_ORBIT` | `false` (default): the walking avatar and camera rig. `true`: the old mouse-orbit camera with no walking avatar (the other user then sees an avatar derived from where your camera looks) |
 

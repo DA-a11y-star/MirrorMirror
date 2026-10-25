@@ -7,6 +7,12 @@ import argparse
 import asyncio
 
 from websockets.asyncio.server import broadcast, serve
+from websockets.exceptions import ConnectionClosed
+
+# The host's scene is mostly poses now (a few KB), but a full scene with every recipe can reach ~0.5 MB at the
+# object cap, and the library default of 1 MiB would drop the connection. Headroom, not a target.
+MAX_MESSAGE_BYTES = 4 * 1024 * 1024
+SERVER_OPTIONS = dict(compression=None, max_size=MAX_MESSAGE_BYTES)
 
 
 class Relay:
@@ -19,13 +25,15 @@ class Relay:
         try:
             async for message in websocket:
                 broadcast(self.clients - {websocket}, message)
+        except ConnectionClosed:
+            pass  # an abnormal close (a message over the limit, a dropped link); the client is removed below
         finally:
             self.clients.discard(websocket)
             print(f"Client left ({len(self.clients)} online)", flush=True)
 
 
 async def run(host="0.0.0.0", port=8765):
-    async with serve(Relay().handle, host, port, compression=None, close_timeout=1) as server:
+    async with serve(Relay().handle, host, port, close_timeout=1, **SERVER_OPTIONS) as server:
         print(f"Relay listening on ws://{host}:{port}; Ctrl+C to stop.", flush=True)
         await server.serve_forever()
 
