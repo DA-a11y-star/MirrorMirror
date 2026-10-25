@@ -31,6 +31,10 @@ export async function recordingToWav(blob) {
   }
 }
 
+const SPEECH_RMS = 0.025; // mic level that counts as speech
+const SILENCE_MS = 1300; // quiet this long after speech ends an automatic recording
+const NO_SPEECH_MS = 6000; // nobody spoke: give up
+
 export class Voice {
   constructor(url, onEvent) {
     this.url = url;
@@ -103,7 +107,9 @@ export class Voice {
     catch (error) { this.fail(error); }
   }
 
-  async startRecording() {
+  // `auto` (the fist trigger) ends the recording itself: after SILENCE_MS of quiet once speech has been heard, or
+  // gives up if nothing is said within NO_SPEECH_MS. Hold-to-speak leaves stopping to the button.
+  async startRecording(auto = false) {
     if (this.busy || this.recording || this.starting) return;
     if (!this.connected || !this.configured) return this.fail(new Error('Start the voice service with MODEL_API_KEY first'));
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
@@ -131,6 +137,7 @@ export class Voice {
       };
       recorder.onstop = async () => {
         stream.getTracks().forEach(track => track.stop());
+        this._stopWatch();
         if (captureId !== this.captureId) return;
         clearTimeout(this.recordTimer);
         this.stream = null;
@@ -149,6 +156,7 @@ export class Voice {
       this.starting = false;
       this.recording = true;
       this.emit('status', { stage: 'listening' });
+      if (auto) this._watchSilence(stream, captureId);
       this.recordTimer = setTimeout(() => this.stopRecording(), 15000);
     } catch (error) {
       if (captureId === this.captureId) {
@@ -170,7 +178,41 @@ export class Voice {
     if (this.recorder?.state === 'recording') this.recorder.stop();
   }
 
+  // Polls the mic level. Stops the recording shortly after the speaker goes quiet; cancels if nobody speaks.
+  _watchSilence(stream, captureId) {
+    const context = new AudioContext();
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 1024;
+    context.createMediaStreamSource(stream).connect(analyser);
+    const samples = new Float32Array(analyser.fftSize);
+    const startedAt = performance.now();
+    let heard = false;
+    let lastLoud = startedAt;
+    const timer = setInterval(() => {
+      if (captureId !== this.captureId) return this._stopWatch();
+      analyser.getFloatTimeDomainData(samples);
+      const rms = Math.sqrt(samples.reduce((sum, v) => sum + v * v, 0) / samples.length);
+      const now = performance.now();
+      if (rms > SPEECH_RMS) { heard = true; lastLoud = now; }
+      if (heard && now - lastLoud > SILENCE_MS) this.stopRecording();
+      else if (!heard && now - startedAt > NO_SPEECH_MS) {
+        this.cancelRecording();
+        this.emit('status', { stage: 'idle' });
+        this.emit('nospeech');
+      }
+    }, 50);
+    this.watch = { timer, context };
+  }
+
+  _stopWatch() {
+    if (!this.watch) return;
+    clearInterval(this.watch.timer);
+    this.watch.context.close().catch(() => {});
+    this.watch = null;
+  }
+
   cancelRecording() {
+    this._stopWatch();
     this.captureId++;
     this.starting = false;
     clearTimeout(this.recordTimer);

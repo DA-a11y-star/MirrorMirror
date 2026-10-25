@@ -20,6 +20,7 @@ import { CameraRig } from './camera.js';
 import { Dev } from './dev.js';
 import { Objects } from './objects.js';
 import { VoiceUI } from './voice-ui.js';
+import { DustCloud } from './dust.js';
 import { Gestures } from './gestures.js';
 import { GestureUI } from './gesture-ui.js';
 
@@ -40,9 +41,37 @@ const sync = new SceneSync(blocks, { userId: USER_ID, hostId: HOST_ID, objects }
 const peers = new Map(); // user id -> RemoteAvatar
 const heldIds = () => new Set([...interaction.grabs.values()].map(grab => grab.mesh.userData.id));
 const voiceUI = new VoiceUI(VOICE_URL, objects);
+// Building animation: a dust cloud where the next object will land while the voice request runs, bursting when it arrives.
+const dust = new DustCloud(scene);
+const DUST_BASE = new THREE.Vector3();
+const DUST_NDC_X = 0.32; // screen position of the loading whirl, -1..1
+const DUST_NDC_Y = -0.32;
+const dustWant = new THREE.Vector3();
+voiceUI.onBuild = (phase, root) => {
+  if (phase === 'start') {
+    if (dust.state === 'building') return;
+    dust.start(dustTarget(DUST_BASE)); // steerDust then keeps it in place on screen as the camera moves
+  } else if (phase === 'done' && root) {
+    const box = new THREE.Box3().setFromObject(root);
+    const size = box.getSize(new THREE.Vector3());
+    const radius = Math.max(0.3, Math.hypot(size.x, size.z) * 0.6);
+    dust.burst(DUST_BASE.set((box.min.x + box.max.x) / 2, box.min.y + radius * 0.5, (box.min.z + box.max.z) / 2), radius);
+  } else dust.stop();
+};
+// A loading indicator has to be seen: while building, the whirl hovers at a fixed clear spot on screen (right of centre,
+// below the panels) at the blocks' distance, wherever the object will eventually land. The burst happens at the object.
+function dustTarget(out) {
+  const dist = THREE.MathUtils.clamp(Math.hypot(camera.position.x, camera.position.z + 0.4), 2.5, 8);
+  out.set(DUST_NDC_X, DUST_NDC_Y, 0.5).unproject(camera).sub(camera.position).normalize().multiplyScalar(dist).add(camera.position);
+  out.y = Math.max(out.y, 0.3);
+  return out;
+}
+function steerDust(dt) {
+  if (dust.state === 'building') dust.center.lerp(dustTarget(dustWant), 1 - Math.exp(-5 * dt));
+}
 // The landing page's choice. Nothing consumes it yet; sets (CLAUDE.md, planned work B) will build from it.
 const presetId = currentPreset();
-window.app = { renderer, scene, camera, view, hands, blocks, interaction, gaze, gazeUI, offAxis, sync, peers, objects, voiceUI, presetId }; // dev console
+window.app = { renderer, scene, camera, view, hands, blocks, interaction, gaze, gazeUI, offAxis, sync, peers, objects, voiceUI, presetId, dust }; // dev console
 
 // Avatar, camera rig and input. Keys and mouse are read only in input.js; everything below consumes intents.
 const input = new Input(renderer.domElement, { mouseFallback: TRACKER_SOURCE === 'mouse' });
@@ -149,7 +178,9 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  dust.setViewport(renderer.domElement.height, camera.fov);
 });
+dust.setViewport(renderer.domElement.height, camera.fov);
 
 const hud = document.getElementById('hud');
 let frames = 0;
@@ -168,7 +199,9 @@ renderer.setAnimationLoop(() => {
   gestures.setFrame(tracker.frame?.hands ?? [], now);
   const intents = gaze.calibrating ? emptyIntents() : input.poll();
   if (intents.toggles.mode) gestures.toggleMode();
+  gestures.suppressVoice = interaction.grabs.size > 0;
   gestures.apply(intents);
+  if (intents.toggles.voice) voiceUI.wake();
   if (intents.toggles.dev) dev.toggle();
   if (intents.toggles.recenter) offAxis.recenter();
   if (intents.toggles.depthFx) {
@@ -196,6 +229,8 @@ renderer.setAnimationLoop(() => {
   interaction.update(gaze.get(now), !gaze.calibrating && gestures.mode === 'EDIT', now);
   gazeUI.update(now, interaction.target?.userData.id, [...interaction.grabs.values()].map(g => g.mesh.userData.id).join(', '));
   gestureUI.update();
+  steerDust(dt);
+  dust.update(dt);
   dev.update({
     fps: fpsShown, frameMs, rig, locomotion, intents, camera, view, gestures,
     tracker, gaze: gaze.get(now), gazeTargetId: interaction.target?.userData.id, gazeTargetObject: interaction.target, now,

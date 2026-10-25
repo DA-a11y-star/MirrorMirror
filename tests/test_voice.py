@@ -15,7 +15,7 @@ from websockets.asyncio.client import connect
 from websockets.asyncio.server import serve
 
 from voice.layout import half_extents, resolve
-from voice.main import handle, validate_wav
+from voice.main import clean_command, handle, validate_wav
 from voice.muse import Muse, load_env
 from voice.planner import generate
 
@@ -192,6 +192,25 @@ class PipelineTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(calls[0]["messages"][1]["content"], "A chair")
         finally:
             await runner.cleanup()
+
+
+class CommandCleaningTests(unittest.TestCase):
+    def test_wake_phrase_and_verb_are_stripped(self):
+        for spoken, expected in [
+            ("Mirror mirror, make a blue chair.", "a blue chair"),
+            ("Mirror, mirror, make an oak table", "an oak table"),
+            ("mirror mirror build me a tall lamp!", "a tall lamp"),
+            ("Mirror mirror on the wall, create a red house", "a red house"),
+            ("Mirror mirror, could you give us a tree?", "a tree"),
+            ("Mirror mirror, undo", "undo"),
+            ("A blue chair with wooden legs", "A blue chair with wooden legs"),
+            ("a table that makes sense", "a table that makes sense"),
+        ]:
+            self.assertEqual(clean_command(spoken), expected, spoken)
+
+    def test_only_the_wake_phrase_leaves_nothing(self):
+        self.assertEqual(clean_command("Mirror mirror."), "")
+        self.assertEqual(clean_command("Mirror mirror, make"), "make")
 
 
 class EnvFileTests(unittest.TestCase):

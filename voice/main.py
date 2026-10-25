@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import io
 import json
+import re
 import ssl
 import time
 import wave
@@ -33,6 +34,17 @@ def validate_wav(data):
         raise ValueError("Invalid WAV recording") from exc
 
 
+WAKE = re.compile(r"^\W*mirror[\s,.\-]+mirror\b(?:\W+on the wall\b)?[\s,.:;!?\-]*", re.I)
+VERB = re.compile(r"^(?:(?:please|hey)\W+)?(?:(?:can|could|would) you\s+)?(?:make|build|create|generate|give|get|add|summon|spawn)(?:\s+(?:me|us))?\s+", re.I)
+
+
+def clean_command(text):
+    """'Mirror mirror, make a blue chair.' -> 'a blue chair'. Leaves text without the wake phrase or a verb alone."""
+    text = WAKE.sub("", text.strip(), count=1)
+    text = VERB.sub("", text, count=1)
+    return text.strip(" ,.;:!?-\t\n")
+
+
 async def handle(websocket, muse):
     async def send(kind, **fields):
         await websocket.send(json.dumps({"type": kind, **fields}, allow_nan=False))
@@ -54,7 +66,9 @@ async def handle(websocket, muse):
                     text = request.get("text")
                 if not isinstance(text, str) or not 1 <= len(text.strip()) <= 2000:
                     raise ValueError("Describe an object in 1–2000 characters")
-                text = text.strip()
+                text = clean_command(text)
+                if not text:
+                    raise ValueError("Say what to make, like “mirror mirror, make a blue chair”")
                 if text.lower().rstrip(".!?") in ("undo", "undo last", "undo the last creation", "undo last creation"):
                     await send("undo")
                     continue

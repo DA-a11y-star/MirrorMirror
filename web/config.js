@@ -47,6 +47,8 @@ export const GESTURE = {
   TOGGLE_ONSET_MS: 700,        // the two fists must start within this of each other
   TOGGLE_OPEN_WINDOW_MS: 1400,
   TOGGLE_COOLDOWN_MS: 800,
+  VOICE_FIST_MS: 500,          // EDIT mode: one fist held this long starts voice listening
+  VOICE_COOLDOWN_MS: 1500,
   AXIS_ISOLATION: 2,           // if one axis is this many times the others, damp the others
   AXIS_ISOLATION_SCALE: 0.5,
 };

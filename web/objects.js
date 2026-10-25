@@ -69,8 +69,8 @@ export class Objects {
     return root;
   }
 
-  place(root) {
-    // Try center first, then nearby spots. Keep growth in a small demo workspace.
+  // Try center first, then nearby spots. Keep growth in a small demo workspace.
+  _candidates() {
     const candidates = [[0, 0]];
     for (let ring = 1; ring <= 4; ring++) {
       for (let i = 0; i < 12; i++) {
@@ -78,6 +78,23 @@ export class Objects {
         candidates.push([Math.cos(angle)*ring*.55, Math.sin(angle)*ring*.55]);
       }
     }
+    return candidates;
+  }
+
+  // Where the next object will probably land (assuming a ~0.7 m footprint), for the build animation. Floor level.
+  nextSpot(footprint = .7) {
+    this.container.updateWorldMatrix(true, true);
+    const occupied = this.container.children.map(child => new THREE.Box3().setFromObject(child).expandByScalar(.06));
+    const half = footprint / 2;
+    for (const [x, z] of this._candidates()) {
+      const box = new THREE.Box3(new THREE.Vector3(x - half, 0, z - .4 - half), new THREE.Vector3(x + half, 1, z - .4 + half));
+      if (!occupied.some(other => other.intersectsBox(box))) return new THREE.Vector3(x, 0, z - .4);
+    }
+    return new THREE.Vector3(0, 0, -.4);
+  }
+
+  place(root) {
+    const candidates = this._candidates();
     this.container.updateWorldMatrix(true, true);
     const occupied = this.container.children.map(child => new THREE.Box3().setFromObject(child).expandByScalar(.06));
     const bounds = new THREE.Box3();
