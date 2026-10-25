@@ -31,13 +31,13 @@ export const GESTURE = {
   DEAD_LATERAL: 0.28,
   DEAD_VERTICAL: 0.28,
   DEAD_DEPTH: 0.08,
-  FULL_LATERAL: 1.6,           // right strafe / left look-yaw
-  FULL_VERTICAL: 1.8,          // right fly up/down, left look-pitch
+  FULL_LATERAL: 2.29,           // right strafe / left look-yaw
+  FULL_VERTICAL: 2.57,          // right fly up/down, left look-pitch
   DEAD_LOOK_LATERAL: 0.28,      // left-hand look has its own dead zone and travel
   DEAD_LOOK_VERTICAL: 0.28,
-  FULL_LOOK_LATERAL: 0.9,
-  FULL_LOOK_VERTICAL: 1.1,
-  FULL_DEPTH: 0.4,             // right forward/back — larger = less sensitive
+  FULL_LOOK_LATERAL: 1.8,
+  FULL_LOOK_VERTICAL: 2.2,
+  FULL_DEPTH: 0.57,             // right forward/back — larger = less sensitive
   EXPO: 1.8,
   ENGAGE_MS: 150,
   DISENGAGE_MS: 150,           // how long velocity decays to zero after a fist / lost hand
