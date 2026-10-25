@@ -29,7 +29,7 @@ const rejects = (raw, pattern) => assert.throws(() => validatePreset(raw, BASE),
 test('the shipped registry loads four presets plus the UT Austin background, all valid scenes', async () => {
   const { presets, background, errors } = await loadRegistry(`${ORIGIN}presets/index.json`, diskFetch);
   assert.deepEqual(errors, []);
-  assert.deepEqual(presets.map(p => p.id), ['workshop', 'forest', 'city', 'cyberpunk']);
+  assert.deepEqual(presets.map(p => p.id), ['workshop', 'forest', 'japanese-garden', 'city', 'cyberpunk']);
   assert.equal(background?.id, 'ut-austin');
   for (const preset of [...presets, background]) {
     assert.ok(preset.name && preset.description, preset.id);
