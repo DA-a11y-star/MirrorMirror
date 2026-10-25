@@ -126,7 +126,7 @@ async def main():
     relay_port = relay_server.sockets[0].getsockname()[1]
     http = ThreadingHTTPServer(('127.0.0.1', 0), functools.partial(Quiet, directory=str(ROOT / 'web')))
     threading.Thread(target=http.serve_forever, daemon=True).start()
-    base = f'http://127.0.0.1:{http.server_port}/?relay=ws://127.0.0.1:{relay_port}&tracker=mock'
+    base = f'http://127.0.0.1:{http.server_port}/?relay=ws://127.0.0.1:{relay_port}&tracker=mock&preset=workshop'
     a, b = Page('A', base + '&user=A'), Page('B', base + '&user=B')
     extra = []
     await asyncio.gather(a.start(), b.start())

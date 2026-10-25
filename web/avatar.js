@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { advancePhase, bobAmount, footPose, FOOT_SIDE_M, stepAmount } from './gait.js';
 
 // A simple body + head. update() takes the same snapshot a remote peer would send (`pos`, `vel`, `yaw`, `pitch`,
 // `flying`) and derives the bob, lean and body turn locally, so local and remote avatars animate identically.
@@ -38,7 +39,20 @@ export class Avatar {
     visor.position.set(0, 0.02, -0.13);
     this.head.add(skull, visor);
 
-    this.root.add(this.body, this.head);
+    // Two floating shoes (no legs). They live in the root, which is never rotated, so offsets are world-aligned and the
+    // root's bob is cancelled by `feet.position.y` to keep the soles on the floor.
+    this.feet = new THREE.Group();
+    const shoeMaterial = new THREE.MeshStandardMaterial({ color: 0x24334a, roughness: 0.55 });
+    this.shoes = [0, 1].map(() => {
+      const shoe = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10), shoeMaterial);
+      shoe.scale.set(0.085, 0.06, 0.15);
+      shoe.rotation.order = 'YXZ';
+      shoe.castShadow = true;
+      this.feet.add(shoe);
+      return shoe;
+    });
+
+    this.root.add(this.body, this.head, this.feet);
     for (const mesh of [torso, skull, visor]) mesh.castShadow = true;
     scene.add(this.root);
 
@@ -46,7 +60,9 @@ export class Avatar {
     this.bob = 0; // vertical offset in meters, also read by the first-person camera
     this.leanForward = 0;
     this.leanSide = 0;
-    this.phase = 0;
+    this.phase = 0; // stride cycles; foot 0 leads, foot 1 is half a cycle behind
+    this.dir = new THREE.Vector2(0, -1); // last direction of travel on the floor (x, z), kept while standing
+    this.air = 0; // 0 on the floor, 1 when flying clear of it: the shoes dangle instead of stepping
     this.time = 0;
     this._f = new THREE.Vector3();
     this._r = new THREE.Vector3();
@@ -87,11 +103,32 @@ export class Avatar {
     this.leanSide += (THREE.MathUtils.clamp(side, -1, 1) * MAX_LEAN - this.leanSide) * k;
     this.body.rotation.set(-this.leanForward, this.bodyYaw, -this.leanSide);
 
-    // Bob only while moving, with each step. No idle hover: a still avatar stays still.
-    this.phase += dt * moving * Math.PI * 2 * 1.6;
-    this.bob = Math.abs(Math.sin(this.phase)) * 0.04 * Math.min(moving, 1);
+    // Procedural walk: the stride phase follows distance travelled, so planted shoes stay planted.
+    this.air += (THREE.MathUtils.clamp((state.pos[1] - 0.05) / 0.25, 0, 1) - this.air) * ease(10, dt);
+    const amount = stepAmount(speed) * (1 - this.air);
+    this.phase = advancePhase(this.phase, speed * (1 - this.air), dt);
+    this.bob = bobAmount(this.phase, amount);
+    if (speed > 0.05) this.dir.set(vx / speed, vz / speed);
+    this._placeShoes(state, amount);
 
     this.root.position.set(state.pos[0], state.pos[1] + this.bob, state.pos[2]);
     this.head.rotation.set(state.pitch, state.yaw, 0);
+  }
+
+  _placeShoes(state, amount) {
+    const rx = Math.cos(this.bodyYaw); // body's right
+    const rz = -Math.sin(this.bodyYaw);
+    const [vx, , vz] = state.vel;
+    this.feet.position.y = -this.bob;
+    this.shoes.forEach((shoe, i) => {
+      const { f, lift } = footPose(this.phase + i * 0.5);
+      const side = (i === 0 ? -1 : 1) * FOOT_SIDE_M;
+      // Stepping shrinks to nothing at rest, so standing shoes sit side by side under the body.
+      const x = this.dir.x * f * amount + rx * side - vx * 0.05 * this.air; // flying: shoes trail the motion
+      const z = this.dir.y * f * amount + rz * side - vz * 0.05 * this.air;
+      const y = 0.06 + lift * amount + 0.05 * this.air; // 0.06 = shoe half height, so the sole rests on the floor
+      shoe.position.set(x, y, z);
+      shoe.rotation.set(-Math.min(lift / 0.13, 1) * 0.25 * amount, this.bodyYaw, 0); // toe tips up as it swings
+    });
   }
 }

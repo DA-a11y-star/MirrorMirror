@@ -65,3 +65,52 @@ test('missing API configuration prevents requests while undo can still be sent',
   voice.generate('undo');
   assert.equal(JSON.parse(voice.socket.sent[0]).text, 'undo');
 });
+
+test('cancel drops a pending request: the late answer is ignored and the next request works', async context => {
+  const { voice, events } = setup(context);
+  const old = voice.socket;
+  voice.generate('A blue chair');
+  assert.equal(voice.busy, true);
+  assert.equal(voice.cancel(), true);
+  assert.equal(voice.busy, false);
+  assert.equal(events.at(-1).type, 'cancelled');
+  assert.ok(!events.some(e => e.type === 'offline'), 'an intentional reset is not reported as offline');
+  assert.equal(old.onmessage, null, 'nothing the old connection says is heard any more');
+  await new Promise(resolve => setTimeout(resolve, 200)); // reconnects on its own
+  assert.notEqual(voice.socket, old, 'a fresh connection');
+  voice.socket.receive({ type: 'ready', configured: true });
+  voice.generate('A tree');
+  assert.equal(voice.socket.sent.length, 1);
+  voice.socket.receive({ type: 'object', spec: { name: 'tree' } });
+  assert.equal(events.at(-1).type, 'object');
+  assert.equal(events.at(-1).spec.name, 'tree');
+});
+
+test('cancel with nothing in progress does nothing', context => {
+  const { voice, events } = setup(context);
+  const before = events.length;
+  assert.equal(voice.cancel(), false);
+  assert.equal(events.length, before);
+});
+
+test('cancel while the microphone permission prompt is open abandons the recording', async context => {
+  const { voice } = setup(context);
+  let permit, stopped = 0;
+  const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: {
+    mediaDevices: { getUserMedia: () => new Promise(resolve => { permit = resolve; }) },
+  } });
+  globalThis.window = { MediaRecorder: class {} };
+  context.after(() => {
+    Object.defineProperty(globalThis, 'navigator', navigatorDescriptor);
+    delete globalThis.window;
+  });
+  const pending = voice.startRecording(true);
+  assert.equal(voice.starting, true);
+  assert.equal(voice.cancel(), true);
+  permit({ getTracks: () => [{ stop() { stopped++; } }] });
+  await pending;
+  assert.equal(stopped, 1, 'the microphone is released');
+  assert.equal(voice.recording, false);
+  assert.equal(voice.socket.sent.length, 0);
+});

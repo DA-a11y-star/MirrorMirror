@@ -7,7 +7,8 @@ import * as THREE from '../web/vendor/three.module.js';
 async function load(name) {
   const path = new URL(`../web/${name}.js`, import.meta.url);
   const three = new URL('../web/vendor/three.module.js', import.meta.url).href;
-  const source = (await readFile(path, 'utf8')).replaceAll("from 'three'", `from '${three}'`);
+  const source = (await readFile(path, 'utf8')).replaceAll("from 'three'", `from '${three}'`)
+    .replaceAll("from './gait.js'", `from '${new URL('../web/gait.js', import.meta.url).href}'`); // gait.js has no imports
   return import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
 }
 const { Locomotion, FLY_SPEED, WORLD_BOUND, PITCH_LIMIT } = await load('locomotion');
@@ -415,4 +416,49 @@ test('a custom spawn is used at start and on respawn', () => {
   l.update(intents({ toggles: { reset: true } }), 1 / 60);
   assert.deepEqual(l.pos.toArray(), [0, 0, 3]);
   assert.equal(l.pitch, -0.35);
+});
+
+test('avatar walking: shoes plant on the floor, step while moving and gather at rest', () => {
+  const scene = new THREE.Scene();
+  const avatar = new Avatar(scene);
+  const pos = [0, 0, 0];
+  const worldShoe = i => ({ x: pos[0] + avatar.shoes[i].position.x, z: pos[2] + avatar.shoes[i].position.z, y: avatar.shoes[i].position.y });
+  let lifted = 0;
+  let planted = 0;
+  let anchor = null;
+  let prevPhase = 0;
+  for (let i = 0; i < 400; i++) {
+    pos[2] -= 2 / 60;
+    avatar.update({ pos, vel: [0, 0, -2], yaw: 0, pitch: 0, flying: true }, 1 / 60);
+    if (i < 120) continue; // let the lean and body yaw settle
+    const w = worldShoe(0);
+    const grounded = avatar.shoes[0].position.y - avatar.feet.position.y < 0.0605 + avatar.bob;
+    if (w.y > 0.07 + 0.01) lifted++;
+    if (w.y <= 0.0601) {
+      planted++;
+      if (anchor && avatar.phase >= prevPhase && Math.abs(w.z - anchor.z) > 0.12) assert.fail(`planted shoe slid: ${w.z - anchor.z}`);
+      anchor ??= w;
+    } else anchor = null;
+    prevPhase = avatar.phase;
+    assert.ok(Number.isFinite(w.x) && Number.isFinite(w.z) && grounded !== undefined);
+  }
+  assert.ok(lifted > 20 && planted > 20, `steps: lifted ${lifted}, planted ${planted}`);
+  for (let i = 0; i < 120; i++) avatar.update({ pos, vel: [0, 0, 0], yaw: 0, pitch: 0, flying: true }, 1 / 60);
+  const [a, b] = [avatar.shoes[0].position, avatar.shoes[1].position];
+  assert.ok(Math.abs(a.z) < 0.01 && Math.abs(b.z) < 0.01, 'standing shoes sit side by side');
+  assert.ok(Math.abs(a.x - b.x) > 0.2, 'and apart');
+  assert.ok(Math.abs(a.y - 0.06) < 1e-6, 'resting on the floor');
+});
+
+test('avatar walking: flying clear of the floor, shoes dangle instead of stepping', () => {
+  const scene = new THREE.Scene();
+  const avatar = new Avatar(scene);
+  for (let i = 0; i < 120; i++) avatar.update({ pos: [0, 3, 0], vel: [0, 0, -2], yaw: 0, pitch: 0, flying: true }, 1 / 60);
+  const ys = [];
+  for (let i = 0; i < 120; i++) {
+    avatar.update({ pos: [0, 3, 0], vel: [0, 0, -2], yaw: 0, pitch: 0, flying: true }, 1 / 60);
+    ys.push(avatar.shoes[0].position.y, avatar.shoes[1].position.y);
+  }
+  assert.ok(Math.max(...ys) - Math.min(...ys) < 1e-6, 'no stepping in the air');
+  assert.ok(avatar.bob < 1e-9, 'no step bob in the air');
 });

@@ -133,17 +133,23 @@ export class GazeUI {
     }
   }
 
+  // Runs every frame, so every write is skipped unless the value changed: a style or text write dirties layout, and
+  // doing it 60 times a second for nothing cost a full style recalc and layout per frame.
   update(now, target, holding) {
-    this.validateButton.disabled = !(this.input.source === 'webcam' && this.input.calibration.model);
+    const canValidate = !(this.input.source === 'webcam' && this.input.calibration.model);
+    if (canValidate !== this.lastValidateDisabled) this.validateButton.disabled = this.lastValidateDisabled = canValidate;
     const point = this.input.get(now);
-    this.reticle.hidden = !point;
+    if (!point !== this.lastHidden) this.reticle.hidden = this.lastHidden = !point;
     if (point) {
-      this.reticle.style.left = `${point.x * 100}%`;
-      this.reticle.style.top = `${point.y * 100}%`;
-      this.reticle.classList.toggle('on-target', !!target);
+      const left = `${(point.x * 100).toFixed(2)}%`;
+      const top = `${(point.y * 100).toFixed(2)}%`;
+      if (left !== this.lastLeft) this.reticle.style.left = this.lastLeft = left;
+      if (top !== this.lastTop) this.reticle.style.top = this.lastTop = top;
+      if (!!target !== this.lastOnTarget) this.reticle.classList.toggle('on-target', this.lastOnTarget = !!target);
     }
     const status = this.message || this.input.status;
     const refined = now - this.input.refinedAt < 1500 ? ' · gaze refined' : '';
-    this.status.textContent = `${status}${holding ? ` · holding ${holding}` : target ? ` · target ${target}` : ''}${refined}`;
+    const text = `${status}${holding ? ` · holding ${holding}` : target ? ` · target ${target}` : ''}${refined}`;
+    if (text !== this.lastText) this.status.textContent = this.lastText = text;
   }
 }

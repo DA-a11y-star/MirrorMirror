@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { DEV_ORBIT, GAZE_SOURCE, GESTURE, HOST_ID, PARALLAX_STRENGTH, RELAY_URL, SET_ID, TRACKER_SOURCE, TRACKER_URL, USER_ID, VOICE_URL } from './config.js';
+import { currentPreset, DEV_ORBIT, GAZE_SOURCE, GESTURE, HOST_ID, PARALLAX_STRENGTH, RELAY_URL, SET_ID, TRACKER_SOURCE, TRACKER_URL, USER_ID, VOICE_URL } from './config.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RemoteAvatar } from './remote-avatar.js';
 import { OffAxis } from './offaxis.js';
@@ -10,6 +10,7 @@ import { startMockTracker } from './mock.js';
 import { startMouseTracker } from './mouse-tracker.js';
 import { applyEnvironment, createRenderer, createScene, SPAWNS } from './scene.js';
 import { SETS, loadSetModel } from './sets.js';
+import { loadWorld } from './world.js';
 import { sceneryStats } from './scenery.js';
 import { startTracker } from './tracker.js';
 import { GazeInput } from './gaze.js';
@@ -23,6 +24,7 @@ import { CameraRig } from './camera.js';
 import { Dev } from './dev.js';
 import { Objects } from './objects.js';
 import { VoiceUI } from './voice-ui.js';
+import { DustCloud } from './dust.js';
 import { Gestures } from './gestures.js';
 import { GestureUI } from './gesture-ui.js';
 
@@ -43,15 +45,53 @@ const sync = new SceneSync(blocks, { userId: USER_ID, hostId: HOST_ID, objects }
 const peers = new Map(); // user id -> RemoteAvatar
 const heldIds = () => new Set([...interaction.grabs.values()].map(grab => grab.mesh.userData.id));
 const voiceUI = new VoiceUI(VOICE_URL, objects);
-window.app = { renderer, scene, camera, view, hands, blocks, interaction, gaze, gazeUI, offAxis, sync, peers, objects, voiceUI }; // dev console
+// Building animation: a dust cloud where the next object will land while the voice request runs, bursting when it arrives.
+const dust = new DustCloud(scene);
+const DUST_BASE = new THREE.Vector3();
+const DUST_NDC_X = 0.32; // screen position of the loading whirl, -1..1
+const DUST_NDC_Y = -0.32;
+const dustWant = new THREE.Vector3();
+voiceUI.onBuild = (phase, root) => {
+  if (phase === 'start') {
+    if (dust.state === 'building') return;
+    dust.start(dustTarget(DUST_BASE)); // steerDust then keeps it in place on screen as the camera moves
+  } else if (phase === 'done' && root) {
+    const box = new THREE.Box3().setFromObject(root);
+    const size = box.getSize(new THREE.Vector3());
+    const radius = Math.max(0.3, Math.hypot(size.x, size.z) * 0.6);
+    dust.burst(DUST_BASE.set((box.min.x + box.max.x) / 2, box.min.y + radius * 0.5, (box.min.z + box.max.z) / 2), radius);
+  } else dust.stop();
+};
+// A loading indicator has to be seen: while building, the whirl hovers at a fixed clear spot on screen (right of centre,
+// below the panels) at the blocks' distance, wherever the object will eventually land. The burst happens at the object.
+function dustTarget(out) {
+  const dist = THREE.MathUtils.clamp(Math.hypot(camera.position.x, camera.position.z + 0.4), 2.5, 8);
+  out.set(DUST_NDC_X, DUST_NDC_Y, 0.5).unproject(camera).sub(camera.position).normalize().multiplyScalar(dist).add(camera.position);
+  out.y = Math.max(out.y, 0.3);
+  return out;
+}
+function steerDust(dt) {
+  if (dust.state === 'building') dust.center.lerp(dustTarget(dustWant), 1 - Math.exp(-5 * dt));
+}
+// The landing page's choice. Nothing consumes it yet; sets (CLAUDE.md, planned work B) will build from it.
+const presetId = currentPreset();
+window.app = { renderer, scene, camera, view, hands, blocks, interaction, gaze, gazeUI, offAxis, sync, peers, objects, voiceUI, presetId, dust }; // dev console
 
 // The set's look and model. The model is scenery: it is added to the scene, not to `blocks`, so it can't be targeted.
+let world = null; // the landing-page preset's world, once loaded
 const set = SETS[SET_ID];
 if (!set) throw new Error(`Unknown set "${SET_ID}"; known: ${Object.keys(SETS).join(', ')}`);
 applyEnvironment(scene, look, set.environment);
 if (set.workspace) blocks.position.set(set.workspace[0], 0, set.workspace[1]);
 window.app.set = set;
 window.app.look = look; // dev console: tweak lights and floor live
+// The landing page's preset becomes the world (unless ?set= asks for a model set explicitly).
+if (presetId && !new URLSearchParams(location.search).has('set')) {
+  window.app.worldReady = loadWorld(presetId, { scene, look, camera, blocks }).then(loaded => {
+    world = loaded;
+    window.app.world = loaded;
+  }).catch(error => console.error(`[world] could not load preset ${presetId}: ${error.message}`));
+}
 window.app.setReady = loadSetModel(set, scene, new GLTFLoader()).then(root => {
   window.app.scenery = root;
   if (root) console.info(`[set] ${set.name}: ${JSON.stringify(sceneryStats(root))}`);
@@ -162,7 +202,9 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  dust.setViewport(renderer.domElement.height, camera.fov);
 });
+dust.setViewport(renderer.domElement.height, camera.fov);
 
 const hud = document.getElementById('hud');
 let frames = 0;
@@ -171,6 +213,7 @@ const clock = new THREE.Clock();
 let frameMs = 0;
 let fpsShown = 0;
 let lastSent = 0;
+let lastMode = gestures.mode;
 
 renderer.setAnimationLoop(() => {
   const now = performance.now();
@@ -181,7 +224,13 @@ renderer.setAnimationLoop(() => {
   gestures.setFrame(tracker.frame?.hands ?? [], now);
   const intents = gaze.calibrating ? emptyIntents() : input.poll();
   if (intents.toggles.mode) gestures.toggleMode();
+  if (gestures.mode !== lastMode) { // switching modes (gesture or M) cancels a recording or pending build
+    lastMode = gestures.mode;
+    voiceUI.cancel();
+  }
+  gestures.suppressVoice = interaction.grabs.size > 0;
   gestures.apply(intents);
+  if (intents.toggles.voice) voiceUI.wake();
   if (intents.toggles.dev) dev.toggle();
   if (intents.toggles.recenter) offAxis.recenter();
   if (intents.toggles.depthFx) {
@@ -209,6 +258,9 @@ renderer.setAnimationLoop(() => {
   interaction.update(gaze.get(now), !gaze.calibrating && gestures.mode === 'EDIT', now);
   gazeUI.update(now, interaction.target?.userData.id, [...interaction.grabs.values()].map(g => g.mesh.userData.id).join(', '));
   gestureUI.update();
+  world?.update(performance.now() / 1000);
+  steerDust(dt);
+  dust.update(dt);
   dev.update({
     fps: fpsShown, frameMs, rig, locomotion, intents, camera, view, gestures, renderInfo: renderer.info.render,
     tracker, gaze: gaze.get(now), gazeTargetId: interaction.target?.userData.id, gazeTargetObject: interaction.target, now,
@@ -233,7 +285,7 @@ renderer.setAnimationLoop(() => {
     const others = [...peers.values()].filter(peer => peer.live).map(peer => peer.user).join(', ');
     const link = `${net.status}${net.open ? (others ? ` with ${others}` : '') : ` ${RELAY_URL}`}`; // a wrong address shows here
     const infer = tracker.frame?.infer_ms != null ? ` (${tracker.frame.infer_ms} ms)` : '';
-    hud.textContent = `user ${USER_ID}  ·  ${gestures.mode}  ·  ${fps} fps  ·  tracker ${tracker.status} ${trackerHz} Hz${infer}  ·  relay ${link}  ·  ${parallax}  ·  ${tracker.lastGesture}  ·  ${interaction.lastEnd}`;
+    hud.textContent = `user ${USER_ID}${presetId ? `  ·  set ${presetId}` : ''}  ·  ${gestures.mode}  ·  ${fps} fps  ·  tracker ${tracker.status} ${trackerHz} Hz${infer}  ·  relay ${link}  ·  ${parallax}  ·  ${tracker.lastGesture}  ·  ${interaction.lastEnd}`;
     frames = 0;
     tracker.frames = 0;
     lastHud = now;

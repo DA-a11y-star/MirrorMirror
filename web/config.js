@@ -3,6 +3,9 @@
 const params = new URLSearchParams(globalThis.location?.search);
 
 export const USER_ID = params.get('user') ?? 'A'; // 'A' or 'B'
+// The preset chosen on the landing page (?preset=<id>), or null. A function, not a constant: the landing page loads
+// this module before Play writes the choice into the URL.
+export const currentPreset = () => new URLSearchParams(globalThis.location?.search).get('preset');
 export const HOST_ID = 'A'; // laptop A is the scene authority
 // The relay runs on laptop A. By default a page looks for it on the machine that served the page, so A finds it at
 // localhost, and B finds it too if B opens A's web server (http://<A's address>:8000/?user=B). Otherwise pass
@@ -31,13 +34,13 @@ export const GESTURE = {
   DEAD_LATERAL: 0.28,
   DEAD_VERTICAL: 0.28,
   DEAD_DEPTH: 0.08,
-  FULL_LATERAL: 1.6,           // right strafe / left look-yaw
-  FULL_VERTICAL: 1.8,          // right fly up/down, left look-pitch
+  FULL_LATERAL: 2.29,           // right strafe / left look-yaw
+  FULL_VERTICAL: 2.57,          // right fly up/down, left look-pitch
   DEAD_LOOK_LATERAL: 0.28,      // left-hand look has its own dead zone and travel
   DEAD_LOOK_VERTICAL: 0.28,
-  FULL_LOOK_LATERAL: 0.9,
-  FULL_LOOK_VERTICAL: 1.1,
-  FULL_DEPTH: 0.4,             // right forward/back — larger = less sensitive
+  FULL_LOOK_LATERAL: 1.8,
+  FULL_LOOK_VERTICAL: 2.2,
+  FULL_DEPTH: 0.57,             // right forward/back — larger = less sensitive
   EXPO: 1.8,
   ENGAGE_MS: 150,
   DISENGAGE_MS: 150,           // how long velocity decays to zero after a fist / lost hand
@@ -46,6 +49,8 @@ export const GESTURE = {
   TOGGLE_ONSET_MS: 700,        // the two fists must start within this of each other
   TOGGLE_OPEN_WINDOW_MS: 1400,
   TOGGLE_COOLDOWN_MS: 800,
+  VOICE_FIST_MS: 500,          // EDIT mode: one fist held this long starts voice listening
+  VOICE_COOLDOWN_MS: 1500,
   AXIS_ISOLATION: 2,           // if one axis is this many times the others, damp the others
   AXIS_ISOLATION_SCALE: 0.5,
 };

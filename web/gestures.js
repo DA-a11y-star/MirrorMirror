@@ -7,13 +7,13 @@ export const DEFAULTS = {
   DEAD_LATERAL: 0.28,
   DEAD_VERTICAL: 0.28,
   DEAD_DEPTH: 0.08,
-  FULL_LATERAL: 1.6,
-  FULL_VERTICAL: 1.8,
-  FULL_DEPTH: 0.4,
+  FULL_LATERAL: 2.29,
+  FULL_VERTICAL: 2.57,
+  FULL_DEPTH: 0.57,
   DEAD_LOOK_LATERAL: 0.28,
   DEAD_LOOK_VERTICAL: 0.28,
-  FULL_LOOK_LATERAL: 0.9,
-  FULL_LOOK_VERTICAL: 1.1,
+  FULL_LOOK_LATERAL: 1.8,
+  FULL_LOOK_VERTICAL: 2.2,
   EXPO: 1.8,
   ENGAGE_MS: 150,
   DISENGAGE_MS: 150,
@@ -22,6 +22,8 @@ export const DEFAULTS = {
   TOGGLE_ONSET_MS: 700,
   TOGGLE_OPEN_WINDOW_MS: 1400,
   TOGGLE_COOLDOWN_MS: 800,
+  VOICE_FIST_MS: 500,
+  VOICE_COOLDOWN_MS: 1500,
   AXIS_ISOLATION: 2,
   AXIS_ISOLATION_SCALE: 0.5,
 };
@@ -85,6 +87,9 @@ export class Gestures {
     this.look = emptyStick(); // left hand: yaw
     this.joy = { engaged: false, side: 'right', center: null, raw: emptyStick().raw, curved: emptyStick().curved, out: emptyOut() };
     this.fired = false;
+    this.voice = { since: null, side: null, spent: false, firedAt: -Infinity };
+    this.voiceFired = false;
+    this.suppressVoice = false; // set by the app while a block is held: a gripping hand can read as a fist
   }
 
   toggleMode() {
@@ -98,6 +103,7 @@ export class Gestures {
     this.hands = Array.isArray(hands) ? hands : [];
     this.now = now;
     this._stepToggle(now);
+    this._stepVoice(now);
     this._stepSticks(now);
   }
 
@@ -111,6 +117,10 @@ export class Gestures {
     if (this.fired) {
       intents.toggles.mode = true;
       this.fired = false;
+    }
+    if (this.voiceFired) {
+      intents.toggles.voice = true;
+      this.voiceFired = false;
     }
     return intents;
   }
@@ -189,6 +199,29 @@ export class Gestures {
         this.toggle.state = 'COOLDOWN';
         this.toggle.armedAt = now;
       }
+    }
+  }
+
+  // EDIT mode: one fist (the other hand not a fist) held for VOICE_FIST_MS starts voice listening, once per fist.
+  // Double-fist is the mode toggle, so it is ignored here, as is anything while a block is held.
+  _stepVoice(now) {
+    const v = this.voice;
+    const fists = (this.hands ?? []).filter(isFist);
+    const single = this.mode === 'EDIT' && this.toggle.state === 'IDLE' && !this.suppressVoice && fists.length === 1;
+    if (!fists.length) v.spent = false; // released: ready for the next one
+    if (!single || v.spent) {
+      v.since = null;
+      v.side = null;
+      return;
+    }
+    if (v.side !== fists[0].side) {
+      v.side = fists[0].side;
+      v.since = now;
+    }
+    if (now - v.since >= this.cfg.VOICE_FIST_MS && now - v.firedAt >= this.cfg.VOICE_COOLDOWN_MS) {
+      this.voiceFired = true;
+      v.spent = true;
+      v.firedAt = now;
     }
   }
 

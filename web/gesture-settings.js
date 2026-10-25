@@ -8,7 +8,7 @@ const AXES = [
   { group: 'Look hand', label: 'Turn', full: 'FULL_LOOK_LATERAL', dead: 'DEAD_LOOK_LATERAL', deadMax: 0.6 },
   { group: 'Look hand', label: 'Pitch', full: 'FULL_LOOK_VERTICAL', dead: 'DEAD_LOOK_VERTICAL', deadMax: 0.6 },
 ];
-const KEY = 'gestureSettings';
+const KEY = 'gestureSettings2'; // v2: defaults already include the tuned sensitivity, so old saved multipliers must not stack
 const MIN_SPAN = 0.05; // FULL stays at least this far above DEAD so the axis can still reach full speed
 
 export class GestureSettings {
