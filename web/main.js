@@ -1,13 +1,18 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { currentPreset, DEV_ORBIT, GAZE_SOURCE, GESTURE, HOST_ID, PARALLAX_STRENGTH, RELAY_URL, TRACKER_SOURCE, TRACKER_URL, USER_ID, VOICE_URL } from './config.js';
-import { RemoteAvatar } from './remote-avatar.js';
+import { currentPreset, DEV_ORBIT, GAZE_SOURCE, GESTURE, HOST_ID, PARALLAX_STRENGTH, RELAY_URL, SET_ID, TRACKER_SOURCE, TRACKER_URL, USER_ID, VOICE_URL } from './config.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { headQuaternion, RemoteAvatar } from './remote-avatar.js';
+import { GAZE_LOOK, GazeLook } from './gaze-look.js';
 import { OffAxis } from './offaxis.js';
 import { Hands } from './hands.js';
 import { Net } from './net.js';
 import { startMockTracker } from './mock.js';
 import { startMouseTracker } from './mouse-tracker.js';
-import { createRenderer, createScene, SPAWNS } from './scene.js';
+import { applyEnvironment, createRenderer, createScene, SPAWNS } from './scene.js';
+import { SETS, loadSetModel } from './sets.js';
+import { loadWorld } from './world.js';
+import { sceneryStats } from './scenery.js';
 import { startTracker } from './tracker.js';
 import { GazeInput } from './gaze.js';
 import { GazeUI } from './gaze-ui.js';
@@ -23,13 +28,14 @@ import { VoiceUI } from './voice-ui.js';
 import { DustCloud } from './dust.js';
 import { Library } from './library.js';
 import { LibraryUI } from './library-ui.js';
+import { Dragon } from './dragon.js';
 import { Gestures } from './gestures.js';
 import { GestureUI } from './gesture-ui.js';
 
 const STATE_HZ = 30; // how often this laptop sends its state to the other
 
 const renderer = createRenderer();
-const { scene, camera, blocks } = createScene(USER_ID);
+const { scene, camera, blocks, look } = createScene(USER_ID);
 const hands = new Hands(scene);
 // `camera` is the stable base view (orbit/avatar). `view` is what the viewer's eye actually sees: the same view
 // moved with their head and rendered through an off-axis frustum.
@@ -79,13 +85,46 @@ function steerDust(dt) {
 const presetId = currentPreset();
 window.app = { renderer, scene, camera, view, hands, blocks, interaction, gaze, gazeUI, offAxis, sync, peers, objects, voiceUI, library, libraryUI, presetId, dust }; // dev console
 
+// The set's look and model. The model is scenery: it is added to the scene, not to `blocks`, so it can't be targeted.
+let world = null; // the landing-page preset's world, once loaded
+// A preset whose id is also a model set in sets.js (cyberpunk) loads that model; every other preset is built from
+// primitives by world.js. An explicit ?set= wins over both.
+const explicitSet = new URLSearchParams(location.search).get('set');
+const modelPreset = !explicitSet && SETS[presetId]?.model ? presetId : null;
+const set = SETS[explicitSet ?? modelPreset ?? SET_ID];
+if (!set) throw new Error(`Unknown set "${SET_ID}"; known: ${Object.keys(SETS).join(', ')}`);
+applyEnvironment(scene, look, set.environment);
+if (set.workspace) blocks.position.set(set.workspace[0], 0, set.workspace[1]);
+window.app.set = set;
+// Sets with a `dragon` setting get one circling overhead: decoration, never in `blocks`, placed from the wall clock so both laptops agree.
+const dragon = set.dragon ? new Dragon(scene, set.dragon) : null;
+window.app.dragon = dragon;
+window.app.look = look; // dev console: tweak lights and floor live
+// The landing page's preset becomes the world (unless ?set= asks for a model set explicitly).
+if (presetId && !explicitSet && !modelPreset) {
+  window.app.worldReady = loadWorld(presetId, { scene, look, camera, blocks }).then(loaded => {
+    world = loaded;
+    window.app.world = loaded;
+  }).catch(error => console.error(`[world] could not load preset ${presetId}: ${error.message}`));
+}
+window.app.setReady = loadSetModel(set, scene, new GLTFLoader()).then(root => {
+  window.app.scenery = root;
+  if (root) console.info(`[set] ${set.name}: ${JSON.stringify(sceneryStats(root))}`);
+}).catch(error => console.error(`[set] could not load ${set.name}: ${error.message}`));
+
 // Avatar, camera rig and input. Keys and mouse are read only in input.js; everything below consumes intents.
 const input = new Input(renderer.domElement, { mouseFallback: TRACKER_SOURCE === 'mouse' });
 // Each user spawns at their own end of the blocks, a few steps back, looking down at them.
 const locomotion = new Locomotion({ spawn: SPAWNS[USER_ID] ?? SPAWNS.A });
 const avatar = new Avatar(scene);
+// Floors are the world's: decks and paths you stand on (0 until a preset world has loaded).
+const floorAt = (x, z) => world?.floorAt(x, z) ?? 0;
+locomotion.floorAt = floorAt;
+avatar.floorAt = floorAt;
 const rig = new CameraRig(camera);
 const gestures = new Gestures(GESTURE);
+const gazeLook = new GazeLook(GAZE_LOOK); // the view turns toward where you look when your eyes rest near the screen edge
+const headQ = new THREE.Quaternion();
 // The mouse is the pinch and there are no palms to steer with, so start where pinch grabs (M still toggles).
 if (TRACKER_SOURCE === 'mouse') gestures.mode = 'EDIT';
 const gestureUI = new GestureUI(gestures);
@@ -135,10 +174,17 @@ if (TRACKER_SOURCE === 'mock') {
 } else {
   throw new Error(`Unknown TRACKER_SOURCE: ${TRACKER_SOURCE}`);
 }
+function makePeer(user) {
+  const body = new Avatar(scene);
+  body.floorAt = floorAt;
+  const skeleton = new Hands(scene);
+  skeleton.joints.visible = skeleton.bones.visible = false; // a peer's hands are their avatar's gloves, not bones
+  return new RemoteAvatar(user, body, skeleton, EYE_HEIGHT);
+}
 function onNetMessage(msg) {
   const now = performance.now();
   if (msg.type === 'state') {
-    if (!peers.has(msg.user)) peers.set(msg.user, new RemoteAvatar(msg.user, new Avatar(scene), new Hands(scene), EYE_HEIGHT));
+    if (!peers.has(msg.user)) peers.set(msg.user, makePeer(msg.user));
     peers.get(msg.user).setState(msg, now);
     for (const id of sync.applyState(msg, now, heldIds())) interaction.drop(id);
   } else if (msg.type === 'scene') {
@@ -173,7 +219,7 @@ function buildState(held) {
     avatar: avatarSnapshot(),
     head: frame?.head ? { quat: frame.head.quat } : null,
     target: interaction.target?.userData.id ?? null,
-    hands: (frame?.hands ?? []).map(({ side, pinch, lm }) => ({ side, pinch, lm: lm.map(p => p.map(round)) })),
+    hands: (frame?.hands ?? []).map(({ side, pinch, lm }) => ({ side, pinch, lm: lm.map(p => p.map(round)), ...(gestures.restFor(side) ? { rest: true } : {}) })),
     held: sync.snapshotHeld(held),
   };
 }
@@ -212,6 +258,11 @@ renderer.setAnimationLoop(() => {
   }
   gestures.suppressVoice = interaction.grabs.size > 0;
   gestures.apply(intents);
+  // Eyes toward the edge turn the view, as if the head turned. Not while a block is held, and not for the pointer or mouse
+  // fallback, where the cursor over the panels at the screen edge would spin the view.
+  const eyeLook = gazeLook.update(gaze.source === 'pointer' ? null : gaze.get(now), dt, !gaze.calibrating && interaction.grabs.size === 0);
+  intents.look.dYaw += eyeLook.dYaw;
+  intents.look.dPitch += eyeLook.dPitch;
   if (intents.toggles.voice) voiceUI.wake();
   if (intents.toggles.dev) dev.toggle();
   if (intents.toggles.library) libraryUI.toggle();
@@ -229,6 +280,8 @@ renderer.setAnimationLoop(() => {
   } else {
     locomotion.update(intents, dt, !rig.freeActive && !intents.toggles.freeCam);
     const state = locomotion.state();
+    avatar.setHands(tracker.frame?.hands?.map(h => ({ ...h, rest: gestures.restFor(h.side) }))); // the glove hands copy yours (visible in third person and to the other user)
+    avatar.setHeadTurn(tracker.frame?.head?.quat ? headQuaternion(tracker.frame.head.quat, headQ) : null); // your avatar's head follows your real head
     avatar.update(state, dt);
     rig.update(intents, state, avatar.bob, dt);
     avatar.setVisible(!rig.hideAvatar);
@@ -244,10 +297,12 @@ renderer.setAnimationLoop(() => {
   gazeUI.update(now, interaction.target?.userData.id, [...interaction.grabs.values()].map(g => g.mesh.userData.id).join(', '));
   libraryUI.update(interaction.target);
   gestureUI.update();
+  world?.update(performance.now() / 1000);
+  dragon?.update();
   steerDust(dt);
   dust.update(dt);
   dev.update({
-    fps: fpsShown, frameMs, rig, locomotion, intents, camera, view, gestures,
+    fps: fpsShown, frameMs, rig, locomotion, intents, camera, view, gestures, renderInfo: renderer.info.render,
     tracker, gaze: gaze.get(now), gazeTargetId: interaction.target?.userData.id, gazeTargetObject: interaction.target, now,
   });
   renderer.render(scene, view);

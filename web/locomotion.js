@@ -30,6 +30,8 @@ export class Locomotion {
     this.pitch = 0; // radians, positive looks up, clamped to +-85 degrees
     this.turnVel = 0;
     this.pitchVel = 0;
+    this.grounded = true; // standing on the floor (not flying clear of it)
+    this.floorAt = null; // (x, z) => floor height; null is a flat floor at 0
     this.flying = true; // always on: vertical is live, y is only clamped to the floor
     this._f = new THREE.Vector3();
     this._r = new THREE.Vector3();
@@ -44,6 +46,7 @@ export class Locomotion {
     this.pitch = this.spawn.pitch;
     this.turnVel = 0;
     this.pitchVel = 0;
+    this.grounded = true;
     this.flying = true;
   }
 
@@ -73,10 +76,24 @@ export class Locomotion {
     t.y = THREE.MathUtils.clamp(i.move.vertical, -1, 1) * speed;
     this.vel.lerp(t, smoothing(ACCEL_K, dt));
 
+    const wasY = this.pos.y;
     this.pos.addScaledVector(this.vel, dt);
     this.pos.x = THREE.MathUtils.clamp(this.pos.x, -WORLD_BOUND, WORLD_BOUND);
     this.pos.z = THREE.MathUtils.clamp(this.pos.z, -WORLD_BOUND, WORLD_BOUND);
-    this.pos.y = THREE.MathUtils.clamp(this.pos.y, 0, FLY_CEILING);
+    // Never below the floor under you. `floorAt(x, z)` (set by the world) knows about decks and raised paths. Stepping
+    // onto a higher floor lifts you smoothly; pressing down into a floor you are already on just stops at it.
+    this.pos.y = Math.max(this.pos.y, 0);
+    const floor = this.floorAt ? this.floorAt(this.pos.x, this.pos.z) : 0;
+    if (this.pos.y < floor) {
+      const steppedUp = wasY < floor - 0.002;
+      this.pos.y = steppedUp && floor - this.pos.y >= 0.002 ? this.pos.y + (floor - this.pos.y) * smoothing(25, dt) : floor;
+    }
+    // Walking off the edge of a deck settles back down to the ground, like walking; lifting off (vertical input) is flying.
+    if (this.grounded && floor < this.pos.y - 0.002 && i.move.vertical <= 0.05) {
+      this.pos.y = this.pos.y - floor < 0.004 ? floor : this.pos.y + (floor - this.pos.y) * smoothing(12, dt);
+    }
+    this.grounded = this.pos.y <= floor + 0.01;
+    this.pos.y = Math.min(this.pos.y, FLY_CEILING);
     return this;
   }
 

@@ -41,15 +41,42 @@ export function createScene(userId = 'A') {
   camera.position.set(...(SEATS[userId] ?? SEATS.A)); // standing eye height, a few steps back from the blocks
   camera.lookAt(0, 0.4, 0);
 
-  addLights(scene);
-  addFloor(scene);
+  const lights = addLights(scene);
+  const floor = addFloor(scene);
   const blocks = addBlocks(scene);
 
-  return { scene, camera, blocks };
+  return { scene, camera, blocks, look: { ...lights, ...floor } };
+}
+
+// Repaints the room for a set: sky, fog, lights and floor. Each field is optional; `environment` comes from sets.js.
+export function applyEnvironment(scene, look, environment = {}) {
+  const { background, fog, hemisphere, sun, fill, floor, grid } = environment;
+  if (background != null) scene.background.setHex(background);
+  if (fog) {
+    scene.fog.color.setHex(fog[0]);
+    scene.fog.near = fog[1];
+    scene.fog.far = fog[2];
+  }
+  if (hemisphere) {
+    look.hemisphere.color.setHex(hemisphere[0]);
+    look.hemisphere.groundColor.setHex(hemisphere[1]);
+    look.hemisphere.intensity = hemisphere[2];
+  }
+  if (sun) {
+    look.sun.color.setHex(sun[0]);
+    look.sun.intensity = sun[1];
+  }
+  if (fill) {
+    look.fill.color.setHex(fill[0]);
+    look.fill.intensity = fill[1];
+  }
+  if (floor != null) look.floor.material.color.setHex(floor);
+  if (grid != null) look.grid.visible = grid;
 }
 
 function addLights(scene) {
-  scene.add(new THREE.HemisphereLight(0xffffff, 0xb9b3a8, 1.3));
+  const hemisphere = new THREE.HemisphereLight(0xffffff, 0xb9b3a8, 1.3);
+  scene.add(hemisphere);
 
   const sun = new THREE.DirectionalLight(0xfff4e5, 2.4);
   sun.position.set(3, 6, 4);
@@ -64,6 +91,7 @@ function addLights(scene) {
   const fill = new THREE.DirectionalLight(0xdfe8ff, 0.5);
   fill.position.set(-4, 3, -2);
   scene.add(fill);
+  return { hemisphere, sun, fill };
 }
 
 function addFloor(scene) {
@@ -80,6 +108,7 @@ function addFloor(scene) {
   grid.material.transparent = true;
   grid.material.opacity = 0.5;
   scene.add(grid);
+  return { floor, grid };
 }
 
 function addBlocks(scene) {

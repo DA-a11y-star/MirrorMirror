@@ -1,3 +1,5 @@
+import { DEFAULTS } from './gestures.js';
+
 // Per-laptop settings. Edit these on each machine before the demo, or override them in the page URL, e.g.
 // localhost:8000/?user=B&relay=ws://localhost:8765&tracker=mock to run a second user on the same laptop.
 const params = new URLSearchParams(globalThis.location?.search);
@@ -16,6 +18,8 @@ export const VOICE_URL = 'ws://localhost:8767';
 // 'websocket' = local Python tracker; 'mock' = animated hands for camera-free development; 'mouse' = the cursor is
 // gaze and hand, left button pinches, right-click mouse-looks (a fallback for a dead camera).
 export const TRACKER_SOURCE = params.get('tracker') ?? 'websocket';
+// Which world to show: 'workshop' (the plain room, default) or 'cyberpunk' (the model city). ?set=cyberpunk
+export const SET_ID = params.get('set') ?? 'workshop';
 // 'webcam' = calibrated iris features; 'external' = tracker-provided screen gaze; 'pointer' = explicit dev fallback.
 export const GAZE_SOURCE = 'webcam';
 
@@ -26,29 +30,6 @@ export const PARALLAX_STRENGTH = 1;
 // true = old mouse-orbit camera with no avatar. false = the avatar and camera rig (movement and camera modes).
 export const DEV_ORBIT = false;
 
-// Gesture locomotion. Mutate this object from the console or the dev sliders; the next frame picks it up.
-export const GESTURE = {
-  DOMINANT: 'right',           // open right hand = move; open left hand = look left/right
-  DEAD_LATERAL: 0.28,
-  DEAD_VERTICAL: 0.28,
-  DEAD_DEPTH: 0.08,
-  FULL_LATERAL: 2.29,           // right strafe / left look-yaw
-  FULL_VERTICAL: 2.57,          // right fly up/down, left look-pitch
-  DEAD_LOOK_LATERAL: 0.28,      // left-hand look has its own dead zone and travel
-  DEAD_LOOK_VERTICAL: 0.28,
-  FULL_LOOK_LATERAL: 1.8,
-  FULL_LOOK_VERTICAL: 2.2,
-  FULL_DEPTH: 0.57,             // right forward/back — larger = less sensitive
-  EXPO: 1.8,
-  ENGAGE_MS: 150,
-  DISENGAGE_MS: 150,           // how long velocity decays to zero after a fist / lost hand
-  LOW_CONF_MS: 100,            // pose_conf below 0.5 this long disengages
-  TOGGLE_FIST_MS: 120,
-  TOGGLE_ONSET_MS: 700,        // the two fists must start within this of each other
-  TOGGLE_OPEN_WINDOW_MS: 1400,
-  TOGGLE_COOLDOWN_MS: 800,
-  VOICE_FIST_MS: 500,          // EDIT mode: one fist held this long starts voice listening
-  VOICE_COOLDOWN_MS: 1500,
-  AXIS_ISOLATION: 2,           // if one axis is this many times the others, damp the others
-  AXIS_ISOLATION_SCALE: 0.5,
-};
+// Gesture locomotion tunables live in gestures.js (DEFAULTS). This is the live copy: mutate it from the console or the dev
+// sliders and the next frame picks it up.
+export const GESTURE = { ...DEFAULTS };

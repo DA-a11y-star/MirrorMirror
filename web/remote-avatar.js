@@ -45,6 +45,7 @@ export class RemoteAvatar {
     if (msg.head) headQuaternion(msg.head.quat, this.headTarget).normalize();
     else this.headTarget.identity();
     this.hands.setFrame(msg.hands);
+    this.body.setHands?.(msg.hands); // their avatar's gloves copy their hands
     this.targetBlock = msg.target ?? null;
     this.lastSeen = now;
   }

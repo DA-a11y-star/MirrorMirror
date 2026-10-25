@@ -1,31 +1,31 @@
 // Temporal machines on top of the tracker's one-frame poses. Writes the same intents as input.js.
 // Keyboard remains a fallback: main.js adds the two together and clamps.
-// Defaults match web/config.js `GESTURE`; pass that object so sliders mutate live.
-
+// The one list of gesture tunables. web/config.js exports a mutable copy as `GESTURE`; main.js hands that copy to
+// Gestures, so the console and the dev sliders change them live. Left/right and up/down are measured in palm sizes from the captured centre; depth is the log of the palm-size ratio.
 export const DEFAULTS = {
-  DOMINANT: 'right',
-  DEAD_LATERAL: 0.28,
+  DOMINANT: 'right',           // open right hand = move; open left hand = look left/right
+  DEAD_LATERAL: 0.28,          // dead zone: no output until the hand has moved this far from its centre
   DEAD_VERTICAL: 0.28,
   DEAD_DEPTH: 0.08,
-  FULL_LATERAL: 2.29,
-  FULL_VERTICAL: 2.57,
-  FULL_DEPTH: 0.57,
-  DEAD_LOOK_LATERAL: 0.28,
+  FULL_LATERAL: 2.29,          // full output at this displacement (larger = less sensitive): right strafe
+  FULL_VERTICAL: 2.57,         // right fly up/down
+  FULL_DEPTH: 0.57,            // right forward/back
+  DEAD_LOOK_LATERAL: 0.28,     // the left (look) hand has its own dead zone and travel
   DEAD_LOOK_VERTICAL: 0.28,
-  FULL_LOOK_LATERAL: 1.8,
-  FULL_LOOK_VERTICAL: 2.2,
-  EXPO: 1.8,
-  ENGAGE_MS: 150,
-  DISENGAGE_MS: 150,
-  LOW_CONF_MS: 100,
-  TOGGLE_FIST_MS: 120,
-  TOGGLE_ONSET_MS: 700,
-  TOGGLE_OPEN_WINDOW_MS: 1400,
+  FULL_LOOK_LATERAL: 1.8,      // left look-yaw
+  FULL_LOOK_VERTICAL: 2.2,     // left look-pitch
+  EXPO: 1.8,                   // response curve: fine control near the centre, full speed at the edge
+  ENGAGE_MS: 150,              // an open palm this long captures the stick's centre
+  DISENGAGE_MS: 150,           // how long velocity decays to zero after a fist or a lost hand
+  LOW_CONF_MS: 100,            // pose_conf below 0.5 for this long disengages
+  TOGGLE_FIST_MS: 120,         // each fist must be held this long to arm the mode toggle
+  TOGGLE_ONSET_MS: 700,        // the two fists must start within this of each other
+  TOGGLE_OPEN_WINDOW_MS: 1400, // armed: both hands must open within this
   TOGGLE_COOLDOWN_MS: 800,
-  VOICE_FIST_MS: 500,
+  VOICE_FIST_MS: 3000,         // EDIT mode: one fist held this long starts voice listening
   VOICE_COOLDOWN_MS: 1500,
-  AXIS_ISOLATION: 2,
-  AXIS_ISOLATION_SCALE: 0.5,
+  AXIS_ISOLATION: 2,           // if one axis is this many times the others, damp the others
+  AXIS_ISOLATION_SCALE: 0.5,   // ...to this fraction
 };
 
 const clamp = (v, lo = -1, hi = 1) => Math.max(lo, Math.min(hi, v));
@@ -123,6 +123,13 @@ export class Gestures {
       this.voiceFired = false;
     }
     return intents;
+  }
+
+  // MOVE mode: is this hand's stick not engaged (a fist clutch, or still recentring)? The avatar's ball hand then goes
+  // back to its resting spot instead of following the hand.
+  restFor(side) {
+    if (this.mode !== 'MOVE') return false;
+    return !(side === 'left' ? this.look : this.move).engaged;
   }
 
   debug() {

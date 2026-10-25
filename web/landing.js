@@ -130,8 +130,8 @@ async function showLanding() {
   grid.replaceChildren(...presets.map(presetCard));
   if (!presets.length) grid.append(el('p', 'preset-message', 'No presets found in web/presets/index.json.'));
   // Render the card stills after the cards are on screen, so the menu never waits for them.
-  setTimeout(() => {
-    const shots = panorama.thumbnails(presets.filter(p => !p.thumbnail), 400, 480); // an upright oval, like the glass
+  setTimeout(async () => {
+    const shots = await panorama.thumbnails(presets.filter(p => !p.thumbnail), 400, 480); // an upright oval, like the glass
     for (const card of grid.querySelectorAll('.preset-card')) {
       const shot = shots.get(card.dataset.id);
       const picture = card.querySelector('.preset-picture');

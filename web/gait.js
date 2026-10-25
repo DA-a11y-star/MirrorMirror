@@ -2,10 +2,10 @@
 // The avatar has no legs; two floating shoes step. The stride phase advances with distance travelled (not time), so a
 // planted shoe stays planted on the floor whatever the speed.
 
-export const STRIDE_M = 1.6; // distance the body covers while one foot completes a full cycle (stance + swing)
+export const STRIDE_M = 0.9; // distance the body covers while one foot completes a full cycle (stance + swing)
 export const STANCE = 0.6; // fraction of the cycle a foot is planted
-export const LIFT_M = 0.13; // peak height of a swing
-export const FOOT_SIDE_M = 0.12; // each shoe's lateral offset from the body centre line
+export const LIFT_M = 0.09; // peak height of a swing
+export const FOOT_SIDE_M = 0.09; // each shoe's lateral offset from the body centre line
 export const STEP_SPEED = 0.3; // m/s at which stepping reaches full size (below it the feet gather to rest)
 
 const smooth = t => t * t * (3 - 2 * t);
@@ -33,6 +33,6 @@ export function footPose(u, stride = STRIDE_M, stance = STANCE, lift = LIFT_M) {
 }
 
 // Body bob: lowest at each footfall (twice per cycle), never negative.
-export function bobAmount(phase, amount, peak = 0.04) {
+export function bobAmount(phase, amount, peak = 0.03) {
   return ((1 - Math.cos(4 * Math.PI * phase)) / 2) * peak * amount;
 }

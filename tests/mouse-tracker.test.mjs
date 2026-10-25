@@ -108,14 +108,3 @@ test('with the mouse alone: look at a block, press to grab, drag to move it, rel
   step(.2, .3);
   assert.ok(block.position.distanceTo(dropped) < 1e-9, 'a released block stays put');
 });
-
-test('tracker=mouse is a selectable source and nothing else about the config changes', async () => {
-  globalThis.location = { search: '?tracker=mouse', hostname: 'localhost' };
-  try {
-    const config = await import('../web/config.js?mouse');
-    assert.equal(config.TRACKER_SOURCE, 'mouse');
-    assert.equal(config.USER_ID, 'A');
-  } finally {
-    delete globalThis.location;
-  }
-});

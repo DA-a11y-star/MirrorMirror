@@ -1,4 +1,11 @@
 {
   "background": "ut-austin",
-  "presets": ["workshop", "forest", "city"]
+  "presets": [
+    "workshop",
+    "forest",
+    "japanese-garden",
+    "chinese-city",
+    "city",
+    "cyberpunk"
+  ]
 }

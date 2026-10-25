@@ -1,0 +1,39 @@
+{
+ "format": "mirrormirror.preset",
+ "version": 1,
+ "id": "japanese-garden",
+ "name": "Japanese Garden",
+ "description": "A walled garden with a stream, a red bridge and cherry trees.",
+ "tint": "#e07a9a",
+ "view": {
+  "yaw": -105,
+  "pitch": 3
+ },
+ "environment": {
+  "sky": [
+   "#8fbbe6",
+   "#f3e9dc"
+  ],
+  "fog": [
+   "#dcebf3",
+   35,
+   120
+  ],
+  "ground": "#86cc8a",
+  "sun": {
+   "color": "#fff1d8",
+   "intensity": 1.1,
+   "position": [
+    -8,
+    12,
+    6
+   ]
+  },
+  "ambient": [
+   "#e4f0ff",
+   "#86b585",
+   0.9
+  ]
+ },
+ "objects": {}
+}

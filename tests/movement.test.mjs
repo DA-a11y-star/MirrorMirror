@@ -1,19 +1,11 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import * as THREE from '../web/vendor/three.module.js';
+import { load } from './load.mjs';
 
-// Node doesn't consume the browser import map; resolve the same vendored module for these headless tests.
-async function load(name) {
-  const path = new URL(`../web/${name}.js`, import.meta.url);
-  const three = new URL('../web/vendor/three.module.js', import.meta.url).href;
-  const source = (await readFile(path, 'utf8')).replaceAll("from 'three'", `from '${three}'`)
-    .replaceAll("from './gait.js'", `from '${new URL('../web/gait.js', import.meta.url).href}'`); // gait.js has no imports
-  return import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
-}
 const { Locomotion, FLY_SPEED, WORLD_BOUND, PITCH_LIMIT } = await load('locomotion');
 const { CameraRig } = await load('camera');
-const { Avatar } = await load('avatar');
+const { Avatar, HAND_REACH, HAND_SIDE_M, HAND_REST_Y } = await load('avatar');
 
 function intents(over = {}) {
   return {
@@ -170,7 +162,7 @@ test('first person view eases over ~0.3 s to head height along the look directio
   for (let i = 0; i < 60; i++) step();
   step({ toggles: { view: true } });
   const early = camera.position.clone();
-  assert.ok(early.y > 1.7 && !rig.hideAvatar, 'does not cut');
+  assert.ok(Math.abs(early.y - 1.4) > 0.2 && !rig.hideAvatar, 'does not cut: still out at the third-person position');
   for (let i = 0; i < 12; i++) step(); // 0.2 s
   assert.ok(rig.fpWeight > 0.5 && rig.fpWeight < 1);
   for (let i = 0; i < 40; i++) step();
@@ -446,7 +438,7 @@ test('avatar walking: shoes plant on the floor, step while moving and gather at 
   for (let i = 0; i < 120; i++) avatar.update({ pos, vel: [0, 0, 0], yaw: 0, pitch: 0, flying: true }, 1 / 60);
   const [a, b] = [avatar.shoes[0].position, avatar.shoes[1].position];
   assert.ok(Math.abs(a.z) < 0.01 && Math.abs(b.z) < 0.01, 'standing shoes sit side by side');
-  assert.ok(Math.abs(a.x - b.x) > 0.2, 'and apart');
+  assert.ok(Math.abs(a.x - b.x) > 0.15, 'and apart, but tucked under the belly');
   assert.ok(Math.abs(a.y - 0.06) < 1e-6, 'resting on the floor');
 });
 
@@ -461,4 +453,78 @@ test('avatar walking: flying clear of the floor, shoes dangle instead of steppin
   }
   assert.ok(Math.max(...ys) - Math.min(...ys) < 1e-6, 'no stepping in the air');
   assert.ok(avatar.bob < 1e-9, 'no step bob in the air');
+});
+
+test('floors: a raised floor lifts you smoothly, and you cannot sink through it', () => {
+  const l = new Locomotion();
+  l.floorAt = (x, z) => (Math.abs(x) < 2 && Math.abs(z) < 2 ? 0.3 : 0); // a 4 m deck, 0.3 m thick
+  run(0.5, 60, dt => l.update(intents(), dt));
+  assert.ok(Math.abs(l.pos.y - 0.3) < 1e-6, `standing on the deck at the origin: ${l.pos.y}`);
+  run(1, 60, dt => l.update(intents({ move: { vertical: -1 } }), dt));
+  assert.ok(l.pos.y >= 0.3 - 1e-9, 'pushing down cannot go through the deck');
+  const l2 = new Locomotion();
+  l2.floorAt = l.floorAt;
+  l2.pos.set(-5, 0, 0);
+  const ys = [];
+  run(3, 60, dt => { l2.update(intents({ move: { strafe: 1 } }), dt); ys.push(l2.pos.y); });
+  assert.ok(Math.max(...ys) > 0.29, 'walking onto the deck lifts you to it');
+  assert.ok(ys.every((y, i) => i === 0 || Math.abs(y - ys[i - 1]) < 0.15), 'smoothly, no teleport');
+  assert.ok(l2.pos.x > 2 && l2.pos.y < 0.3, `and once past it you are down at ground level again: ${l2.pos.y}`);
+  const flat = new Locomotion();
+  run(1, 60, dt => flat.update(intents({ move: { vertical: -1 } }), dt));
+  assert.equal(flat.pos.y, 0, 'with no floor function the floor is still 0');
+});
+
+test('avatar standing on a raised floor is standing, not flying', () => {
+  const avatar = new Avatar(new THREE.Scene());
+  avatar.floorAt = () => 0.3;
+  for (let i = 0; i < 120; i++) avatar.update({ pos: [0, 0.3, 0], vel: [0, 0, -2], yaw: 0, pitch: 0, flying: true }, 1 / 60);
+  assert.ok(avatar.air < 0.01, `on the deck, not airborne (${avatar.air})`);
+  const ys = [];
+  for (let i = 0; i < 60; i++) { avatar.update({ pos: [0, 0.3, 0], vel: [0, 0, -2], yaw: 0, pitch: 0, flying: true }, 1 / 60); ys.push(avatar.shoes[0].position.y); }
+  assert.ok(Math.max(...ys) - Math.min(...ys) > 0.05, 'the shoes step');
+});
+
+test('avatar hands: the balls follow where your hands are, rest at the sides, and ease back when tracking stops', () => {
+  const avatar = new Avatar(new THREE.Scene());
+  const state = { pos: [0, 0, 0], vel: [0, 0, 0], yaw: 0.7, pitch: 0, flying: true };
+  const hand = (side, x, y, z) => ({ side, lm: Array.from({ length: 21 }, (_, i) => [x + 0.01 * (i % 3), y, z]) });
+  for (let i = 0; i < 30; i++) avatar.update(state, 1 / 60);
+  const [leftRest, rightRest] = avatar.gloves.map(g => g.position.clone());
+  assert.ok(leftRest.x < 0 && rightRest.x > 0, 'resting: one ball hangs at each side');
+  assert.equal(avatar.handsGroup.rotation.y, 0.7, 'hands live in the view frame, so they turn with where you look');
+  // The right hand raised 25 cm above the usual spot and pushed toward the screen.
+  avatar.setHands([hand('right', 0.1, -0.15, 0.3)]);
+  for (let i = 0; i < 60; i++) { avatar.setHands([hand('right', 0.1, -0.15, 0.3)]); avatar.update(state, 1 / 60); }
+  const raised = avatar.gloves[1].position;
+  assert.ok(raised.y > rightRest.y + 0.1, `lifted with the hand (${raised.y} vs ${rightRest.y})`);
+  assert.ok(raised.z < rightRest.z - 0.05, 'and reaching forward (-z)');
+  assert.ok(avatar.gloves[0].position.distanceTo(leftRest) < 1e-6, 'the untracked left ball stays at rest');
+  // A hand far away stops at the reach from the belly.
+  for (let i = 0; i < 90; i++) { avatar.setHands([hand('left', -0.9, -0.9, -0.2)]); avatar.update(state, 1 / 60); }
+  const far = avatar.gloves[0].position;
+  assert.ok(Math.hypot(far.x + HAND_SIDE_M * 0.5, far.y - HAND_REST_Y, far.z) <= HAND_REACH + 1e-3, 'within reach of the belly');
+  // No frames for a second: both come back to rest.
+  for (let i = 0; i < 120; i++) avatar.update(state, 1 / 60);
+  assert.ok(avatar.gloves[1].position.distanceTo(rightRest) < 0.01 && avatar.gloves[0].position.distanceTo(leftRest) < 0.01);
+  // Broken landmarks are ignored.
+  avatar.setHands([{ side: 'right', lm: [[NaN, 0, 0]] }, { side: 'up', lm: [] }, null, 4]);
+  avatar.setHands('nonsense');
+  avatar.update(state, 1 / 60);
+  assert.ok(avatar.gloves.every(g => Number.isFinite(g.position.x + g.position.y + g.position.z)));
+});
+
+test('avatar hands go back to their resting spots when told to (`rest`), and follow the hand otherwise', () => {
+  const avatar = new Avatar(new THREE.Scene());
+  const state = { pos: [0, 0, 0], vel: [0, 0, 0], yaw: 0, pitch: 0, flying: true };
+  const palm = (x, y, z) => Array.from({ length: 21 }, (_, i) => [x + 0.005 * (i % 4), y, z]);
+  const settle = hands => { for (let i = 0; i < 90; i++) { avatar.setHands(hands); avatar.update(state, 1 / 60); } return avatar.gloves[1].position.clone(); };
+  const rest = avatar.gloves[1].userData.rest;
+  const following = settle([{ side: 'right', lm: palm(0.1, -0.1, 0.3) }]);
+  assert.ok(following.distanceTo(rest) > 0.1, 'tracked: the ball follows the hand away from rest');
+  const clutched = settle([{ side: 'right', lm: palm(0.1, -0.1, 0.3), rest: true }]);
+  assert.ok(clutched.distanceTo(rest) < 1e-3, 'rest: the ball returns to the resting spot even though the hand is still tracked');
+  const again = settle([{ side: 'right', lm: palm(0.1, -0.1, 0.3), rest: false }]);
+  assert.ok(again.distanceTo(following) < 1e-3, 'and follows the hand again when the flag clears');
+  assert.ok(avatar.gloves[0].position.distanceTo(avatar.gloves[0].userData.rest) < 1e-6, 'the other hand is untouched');
 });

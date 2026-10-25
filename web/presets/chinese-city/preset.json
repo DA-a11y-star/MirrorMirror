@@ -1,0 +1,39 @@
+{
+ "format": "mirrormirror.preset",
+ "version": 1,
+ "id": "chinese-city",
+ "name": "Chinese City",
+ "description": "A walled town with a grand avenue, gates and tiled roofs.",
+ "tint": "#c8372d",
+ "view": {
+  "yaw": 0,
+  "pitch": 14
+ },
+ "environment": {
+  "sky": [
+   "#8fb9e4",
+   "#f1e6d2"
+  ],
+  "fog": [
+   "#e9e2d4",
+   45,
+   130
+  ],
+  "ground": "#a89a80",
+  "sun": {
+   "color": "#fff0d6",
+   "intensity": 1.2,
+   "position": [
+    -8,
+    12,
+    6
+   ]
+  },
+  "ambient": [
+   "#fff3df",
+   "#8c7c62",
+   0.9
+  ]
+ },
+ "objects": {}
+}

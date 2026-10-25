@@ -1,6 +1,10 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { buildSetScene, EYE_HEIGHT } from './set-scene.js';
 import { random } from './set-layout.js';
+import { SETS } from './sets.js';
+import { Dragon } from './dragon.js';
+import { fitScenery, prepareScenery } from './scenery.js';
 
 // The landing page's background: a title-screen panorama. The viewer stands in the middle of a preset's scene while
 // the camera turns slowly all the way around, with a gentle bob and a little parallax from the pointer. Showing
@@ -29,6 +33,10 @@ export class Panorama {
     this.reducedMotion = reducedMotion;
     this.seed = Date.now() >>> 0;
     this.built = new Map(); // preset id -> {scene, update, dispose}
+    this.loader = new GLTFLoader();
+    this.models = new Map(); // preset id -> Promise of the set's model (or null), for presets that are model sets
+    this.modelRoots = new Map(); // preset id -> the loaded model (or null once it has failed); present when ready
+    this.wanted = null; // the preset the viewer last asked for, so a slow model never overrides a newer choice
     this.layers = [0, 1].map(() => {
       const canvas = document.createElement('canvas');
       container.append(canvas);
@@ -49,9 +57,38 @@ export class Panorama {
     this.resize();
   }
 
+  // A preset whose id is a model set in sets.js (the Japanese garden) gets that model as its world, placed exactly as the
+  // workspace places it. Resolves with the model, or null if the preset has none or it failed to load.
+  modelFor(preset) {
+    const set = SETS[preset.id];
+    if (!set?.model) return Promise.resolve(null);
+    if (!this.models.has(preset.id)) {
+      this.models.set(preset.id, this.loader.loadAsync(new URL(set.model, import.meta.url).href).then(gltf => {
+        fitScenery(gltf.scene, { scale: set.scale, center: set.center, floor: set.floor });
+        prepareScenery(gltf.scene, set.shadows);
+        return gltf.scene;
+      }).catch(error => {
+        console.warn(`[panorama] could not load ${set.name}: ${error.message}`);
+        return null;
+      }).then(root => {
+        this.modelRoots.set(preset.id, root);
+        return root;
+      }));
+    }
+    return this.models.get(preset.id);
+  }
+
   sceneFor(preset) {
     if (!this.built.has(preset.id)) {
-      this.built.set(preset.id, buildSetScene(preset, random(this.seed + this.built.size * 7919)));
+      const built = buildSetScene(preset, random(this.seed + this.built.size * 7919));
+      const model = this.modelRoots.get(preset.id);
+      if (model) built.scene.add(model); // disposed with the scene
+      if (SETS[preset.id]?.dragon) { // a flier circles overhead; it follows the panorama's own clock, so reduced motion slows it too
+        const dragon = new Dragon(built.scene, SETS[preset.id].dragon);
+        const update = built.update;
+        built.update = t => { update(t); dragon.update(t); };
+      }
+      this.built.set(preset.id, built);
     }
     return this.built.get(preset.id);
   }
@@ -59,6 +96,12 @@ export class Panorama {
   // Crossfade the background to this preset's scene.
   show(preset) {
     if (!preset) return;
+    this.wanted = preset;
+    if (SETS[preset.id]?.model && !this.modelRoots.has(preset.id)) {
+      // The background stays where it is until the model is in, then comes in with the usual crossfade.
+      this.modelFor(preset).then(() => { if (this.wanted === preset) this.show(preset); });
+      return;
+    }
     const set = this.sceneFor(preset);
     const current = this.layers[this.top];
     if (current.set === set) return;
@@ -83,7 +126,8 @@ export class Panorama {
   }
 
   // A still of the preset's scene from its `view`, for its card. Uses a temporary offscreen renderer.
-  thumbnails(presets, width = 480, height = 300) {
+  async thumbnails(presets, width = 480, height = 300) {
+    await Promise.all(presets.map(preset => this.modelFor(preset)));
     const canvas = Object.assign(document.createElement('canvas'), { width, height });
     const renderer = makeRenderer(canvas, { preserveDrawingBuffer: true });
     renderer.setPixelRatio(1);
@@ -126,6 +170,8 @@ export class Panorama {
     this.stop();
     for (const set of this.built.values()) set.dispose();
     this.built.clear();
+    this.models.clear();
+    this.modelRoots.clear();
     for (const layer of this.layers) {
       layer.renderer.dispose();
       layer.renderer.forceContextLoss();

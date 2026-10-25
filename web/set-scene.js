@@ -168,7 +168,8 @@ export function buildSetScene(preset, rand = random(Date.now())) {
 
   // One InstancedMesh per part of each object, holding every copy of that object.
   const byObject = new Map();
-  for (const item of scatterLayout(preset, rand)) {
+  const layout = scatterLayout(preset, rand);
+  for (const item of layout) {
     if (!byObject.has(item.object)) byObject.set(item.object, []);
     byObject.get(item.object).push(item);
   }
@@ -200,6 +201,7 @@ export function buildSetScene(preset, rand = random(Date.now())) {
 
   return {
     scene,
+    layout, // where every object went, so the workspace can find the floors
     update(t) { particles?.userData.update(t); },
     dispose() {
       const shared = new Set(geometries.values());

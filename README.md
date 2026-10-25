@@ -15,6 +15,7 @@ A shared 3D block-modeling workspace driven by eyes, hands, and voice, built for
 | 5. Relay and second user | Implemented, awaiting user review: relay, face-to-face avatars with the other user's head and hands, block ownership and scene sync. Unit tests and a two-browser headless run through the real relay pass; not yet tried on two laptops or with a real head |
 | 6. Depth effect | Implemented; composes with the movement camera and follows tracked head position |
 | 7. Voice-to-CAD | Muse transcription → Muse Wonder primitive assemblies, shared through the relay with creation, movement, undo and late-join reconstruction; real-user rehearsal pending |
+| Sets (first slice) | Cyberpunk city loads as non-interactive scenery with `?set=cyberpunk`. Unit and headless-browser checks pass; not judged on a real display. No in-app switching or sync yet |
 | 8. Polish | Queued: **8a fast-motion tracking recovery**, **8b side-profile stability**, then **8c sound/feedback/visuals** |
 
 Agreed execution order: milestone 2 → 4 → 5, with a user review after each completion. Locomotion remains milestone 3; the two newly reported tracking issues are deferred to milestone 8 unless they block the interaction demo.
@@ -61,6 +62,8 @@ web/
   remote-avatar.js     The other user: their walking body, head turn, hands, and what they are looking at
   mock.js              Camera-free tracker for development using the same protocol
   mouse-tracker.js     Mouse-as-hand fallback (`?tracker=mouse`): cursor is gaze and hand, left button pinches
+  sets.js, scenery.js  Set registry (model, scale, night environment) and the helpers that place a model as non-interactive scenery
+  assets/              Set models (`.glb`) and `CREDITS.md`. Add third-party models here and credit them
   objects.js           Primitive assembly rendering, free-space placement, undo and disposal
   object-protocol.js   Validated render-only assembly format for relay operations and scene snapshots
   voice.js             Browser recording, local WAV conversion and voice WebSocket client
@@ -106,6 +109,21 @@ From the project root, use two terminals:
 # Terminal 2: browser files
 .venv/bin/python -m http.server 8000 --directory web
 ```
+
+### Sets
+
+A set is the world around the blocks: an optional 3D model plus the sky, fog, lights and floor. Pick one with `?set=<id>` (`workshop` is the default plain room). Both laptops must use the same `set`, and both need the model files, which are in the repo. There is no in-app switching or host sync yet.
+
+| Set | Try it | What it is |
+|---|---|---|
+| `workshop` | `http://localhost:8000/` | The plain starting room: floor, grid and blocks |
+| `cyberpunk` | `http://localhost:8000/?set=cyberpunk` (add `&user=B` on the other laptop) | A neon night city model between the two users, with the blocks moved beside it |
+
+- **Scenery, not objects.** The model is added to the scene outside `blocks`, so it can't be targeted, grabbed or synced; hovering or dragging on it does nothing. Its transforms are frozen after loading, so it costs almost nothing per frame (about 45 draw calls and 97k triangles with the avatar and blocks).
+- **It is a miniature.** "Cyberpunk City - #1" is 9 m wide with 3 m towers and streets about 1 m wide, too tight to walk through at any scale. It is shown at 0.3x (2.8 m wide, 0.9 m tall) like a model on the floor, and your hands reach in. Avatars can still fly through it (no collisions).
+- **Console:** `app.set`, `app.scenery` and `app.look` (lights and floor, to tweak live). The console prints `[set] Cyberpunk city: {triangles, meshes, materials}` once it loads.
+- **Add a set:** put the `.glb` in `web/assets/<set>/`, add an entry to `SETS` in `web/sets.js` (`model`, `scale`, `center`, `workspace`, `environment`, `credit`) and list it in `web/assets/CREDITS.md`. A test fails if the file is missing, invalid, or has no credit.
+- **Credit:** the city is by born2012 (CC BY 4.0); see `web/assets/CREDITS.md`.
 
 Open [localhost:8000](http://localhost:8000). `TRACKER_SOURCE = 'websocket'` is the default. The HUD changes from `connecting` / `waiting for camera` to `live`, with tracker Hz. Raise your hands to see the skeletons; thumb-index pinches produce `pinch_start` / `pinch_end` in the HUD.
 
@@ -324,6 +342,15 @@ These cover iris feature extraction (blink and occlusion rejection), the calibra
 A headless-Chrome run with real MediaPipe inference on a sample photo and synthetic eye samples also passed: both models' output reaches the browser, the nine-point calibration completes, gaze over a block highlights it, a pinch grabs without snapping, hand movement moves the block, release places it, and switching the gaze source clears targeting. With the estimate simulated 0.075 screen heights too high, targeting still found the block and three held grabs moved the vertical correction from 0 to +0.033, back toward the block. That script is a one-off with machine-specific paths and isn't in the repo.
 
 **Manual check still needed:** calibrate with your real eyes, confirm the highlight lands on the block you're looking at, and grab and move a block with a pinch.
+
+## Sets checks
+
+```bash
+node --test tests/scenery.test.mjs
+.venv/bin/python tests/e2e/run.py
+```
+
+The unit tests cover placement (scaled, stood on y = 0, footprint centred), freezing and shadow flags, triangle/mesh/material counts, disposal, and that every set with a model points at a valid `.glb` with a credit, a sane scale and a clear workspace. The e2e loads `?set=cyberpunk` (64,171 triangles), checks the model is outside `blocks`, and that hovering and click-dragging on it targets and grabs nothing. **Manual check still needed:** look at it on a real display, since headless frame rates are meaningless.
 
 ## Milestone 2 checks
 

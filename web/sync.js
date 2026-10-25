@@ -124,10 +124,11 @@ export class SceneSync {
     }
   }
 
-  setTarget(id, pos, quat) {
-    const target = this.targets.get(id) ?? { pos: new THREE.Vector3(), quat: new THREE.Quaternion() };
+  setTarget(id, pos, quat, scale) {
+    const target = this.targets.get(id) ?? { pos: new THREE.Vector3(), quat: new THREE.Quaternion(), scale: null };
     target.pos.fromArray(pos);
     target.quat.fromArray(quat).normalize();
+    if (Array.isArray(scale)) (target.scale ??= new THREE.Vector3()).fromArray(scale); // whoever holds a block can resize it
     this.targets.set(id, target);
   }
 
@@ -140,7 +141,7 @@ export class SceneSync {
     this.seen.set(msg.user, now);
     const lost = [];
     const holding = new Set();
-    for (const { id, pos, quat } of msg.held) {
+    for (const { id, pos, quat, scale } of msg.held) {
       if (!this.meshes.has(id)) continue;
       if (mine.has(id)) {
         if (msg.user > this.userId) continue; // we keep it; they will see our claim and let go
@@ -148,7 +149,7 @@ export class SceneSync {
       }
       holding.add(id);
       this.holders.set(id, msg.user);
-      this.setTarget(id, pos, quat);
+      this.setTarget(id, pos, quat, scale);
     }
     for (const [id, user] of this.holders) if (user === msg.user && !holding.has(id)) this.holders.delete(id);
     return lost;
@@ -176,7 +177,7 @@ export class SceneSync {
       if (!this.meshes.has(id) || mine.has(id) || this.holders.has(id)) continue;
       if (now - (this.releasedAt.get(id) ?? -Infinity) < SETTLE_MS) continue;
       if (obj.kind === 'assembly') this.meshes.get(id).scale.fromArray(obj.scale);
-      this.setTarget(id, pos, quat);
+      this.setTarget(id, pos, quat, obj.kind === 'assembly' ? null : obj.scale);
     }
   }
 
@@ -200,9 +201,12 @@ export class SceneSync {
       const mesh = this.meshes.get(id);
       mesh.position.lerp(target.pos, k);
       mesh.quaternion.slerp(target.quat, k);
-      if (!this.holders.has(id) && mesh.position.distanceToSquared(target.pos) < 1e-8 && mesh.quaternion.angleTo(target.quat) < 1e-4) {
+      if (target.scale) mesh.scale.lerp(target.scale, k);
+      if (!this.holders.has(id) && mesh.position.distanceToSquared(target.pos) < 1e-8 && mesh.quaternion.angleTo(target.quat) < 1e-4 &&
+          (!target.scale || mesh.scale.distanceToSquared(target.scale) < 1e-8)) {
         mesh.position.copy(target.pos);
         mesh.quaternion.copy(target.quat);
+        if (target.scale) mesh.scale.copy(target.scale);
         this.targets.delete(id);
       }
     }
@@ -223,7 +227,7 @@ export class SceneSync {
     // Dynamic assemblies use the same ownership stream as starter blocks.
     return [...mine].filter(id => this.meshes.has(id)).map(id => {
       const mesh = this.meshes.get(id);
-      return { id, pos: mesh.position.toArray().map(round), quat: mesh.quaternion.toArray().map(round) };
+      return { id, pos: mesh.position.toArray().map(round), quat: mesh.quaternion.toArray().map(round), scale: mesh.scale.toArray().map(round) };
     });
   }
 
