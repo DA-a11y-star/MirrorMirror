@@ -6,12 +6,12 @@
 //   look:    { dYaw, dPitch } radians this frame; dYaw > 0 = left, dPitch > 0 = up
 //   zoom:    scroll notches this frame; > 0 = scroll down (zoom out / slower)
 //   toggles: edge-triggered, true for exactly one frame
-//            { fly, view, freeCam, dev, depthFx, reset, recenter }
+//            { mode, view, freeCam, dev, depthFx, reset, recenter }
 
 export const MOUSE_SENSITIVITY = 0.0022; // radians per pixel of pointer-lock movement
 
 const KEY_TOGGLES = {
-  KeyF: 'fly',
+  KeyM: 'mode',
   KeyV: 'view',
   KeyC: 'freeCam',
   Backquote: 'dev',
@@ -28,9 +28,10 @@ export function emptyIntents() {
   return {
     move: { forward: 0, strafe: 0, vertical: 0 },
     turn: 0,
+    pitch: 0,                     // -1..1 look-pitch rate (left-hand stick)
     look: { dYaw: 0, dPitch: 0 },
     zoom: 0,
-    toggles: { fly: false, view: false, freeCam: false, dev: false, depthFx: false, reset: false, recenter: false },
+    toggles: { mode: false, view: false, freeCam: false, dev: false, depthFx: false, reset: false, recenter: false },
   };
 }
 

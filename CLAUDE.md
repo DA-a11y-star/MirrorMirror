@@ -10,14 +10,14 @@
 ## Architecture
 Four pieces. Python does sensing and the model calls, the browser does rendering, and a dumb relay connects the two users.
 
-- **tracker/** (Python): webcam hand tracking, eye tracking, head pose, gesture classification, landmark filtering. Serves a WebSocket on `localhost:8766` that only the local browser reads. Capture runs in its own thread and never blocks.
+- **tracker/** (Python): webcam hand tracking, eye tracking, head pose, **static per-frame pose labels** (`open|fist|pinch|other` plus a filtered palm; `classify_pose` in `tracker/gestures.py`), landmark filtering. Temporal gesture machines (mode toggle, joysticks) do **not** live here. Serves a WebSocket on `localhost:8766` that only the local browser reads. Capture runs in its own thread and never blocks.
 - **voice/** (Python, `python -m voice.main`): a separate local service on `localhost:8767`. Takes a WAV from the browser, transcribes it with Muse Voice Transcribe, asks Muse Wonder for a primitive assembly, validates and lays it out, and returns it. Needs internet and `MODEL_API_KEY`. Kept separate so a slow model call can never stall tracking.
 - **web/** (three.js, plain ES modules, no bundler): renders the scene, avatars and hands; gaze targeting, manipulation, locomotion, cameras, depth effect, voice UI, object sync. Reads the local tracker feed directly (your own avatar never round-trips through the relay) and sends its state to the relay.
 - **relay/** (Python `websockets`): forwards every message to all other clients. No parsing, no state, no game logic.
 
 Key web-side ideas:
 - **Blocks and assemblies.** A scene object is a root `Group`/`Mesh` in the `blocks` container with `userData.id`. The five starter blocks are plain meshes. Voice objects are **assemblies**: groups of primitive parts (`box`, `sphere`, `cylinder`, `cone`) described by a validated JSON spec (`web/object-protocol.js`). Everything targetable and grabbable lives in that container.
-- **Intents.** Keyboard and mouse are read only in `input.js`, which produces one intents object per frame. Gestures are meant to produce the same object later.
+- **Intents.** Keyboard and mouse are read only in `input.js`, which produces one intents object per frame. `gestures.js` turns the tracker's poses into the same object (the two are summed and clamped in `main.js`), so locomotion and camera code are unchanged.
 - **Host authority.** Laptop A owns the shared scene. Everyone else only renders what the host and the object's current holder send.
 
 Existing sensing code: `tracker/hands.py`, `tracker/gestures.py`, `tracker/filters.py` were extracted from the working `hand_mouse.py` prototype (still in the repo, still runnable). Use webcam iris tracking with screen calibration for gaze now; keep its provider replaceable by a dedicated eye tracker later. Wrap existing sensing code rather than rewriting it.
@@ -32,12 +32,13 @@ web/       index.html, main.js, config.js, scene.js
            gaze.js, gaze-ui.js, gaze-validation.js
            interaction.js
            input.js, locomotion.js, camera.js, dev.js
+           gestures.js, gesture-ui.js, gesture-settings.js
            avatar.js, remote-avatar.js
            net.js, sync.js, object-protocol.js, objects.js
            voice.js, voice-ui.js
            vendor/ (three.js 0.186, OrbitControls)
 tests/     Node (*.test.mjs) and Python (test_*.py)
-README.md, MOVEMENT_CAMERA.md (the movement/camera task spec), hand_mouse.py, juggle.py (prototype)
+README.md, MOVEMENT_CAMERA.md (the movement/camera task spec), GESTURE_UX.md (the gesture task spec), hand_mouse.py, juggle.py (prototype)
 hand_landmarker.task, face_landmarker.task (MediaPipe models, committed so venue Wi-Fi isn't needed)
 ```
 Planned new files are listed under Planned work (`web/sets/`, `web/library.js`, `web/gait.js`, ...).
@@ -54,7 +55,7 @@ python -m voice.main                       # only on a laptop that generates obj
 - Laptop A opens `http://localhost:8000`. Laptop B opens `http://<A's address>:8000/?user=B` and runs only its own tracker. Find A's address with `ipconfig getifaddr en0`.
 - `web/config.js` holds `USER_ID`, `HOST_ID`, `RELAY_URL`, `TRACKER_URL`, `VOICE_URL`, screen size in meters (for the depth effect), `PARALLAX_STRENGTH`, `DEV_ORBIT`. `user`, `relay` and `tracker` can be overridden in the page URL (`?user=B&relay=ws://localhost:8765&tracker=mock`). **No IP address is hard-coded**: the relay is looked up on the machine that served the page.
 - One laptop, two users: open two browser **windows** (not tabs: a background tab stops rendering and sending). Arrow keys move only the window you last clicked.
-- Controls: arrows walk and turn, A/D strafe, F fly (Space/Shift up/down), V first/third person, C free cam, P depth effect, R respawn, H recenter head, backtick dev overlay. Click the scene for mouse look (Esc releases).
+- Controls: arrows walk and turn, A/D strafe, Space/Shift up/down (flying is always on), M toggle MOVE/EDIT mode, V first/third person, C free cam, P depth effect, R respawn, H recenter head, backtick dev overlay. Click the scene for mouse look (Esc releases).
 
 ## Protocol
 All messages are JSON, which is fine at this size on a LAN. Optimize only if measured latency demands it (see Known issues: scene size).
@@ -62,12 +63,13 @@ All messages are JSON, which is fine at this size on a LAN. Optimize only if mea
 **tracker → web** (at tracker frame rate)
 ```json
 {"type":"frame","t":0.0,
- "hands":[{"side":"right","lm":[[x,y,z],...21],"pinch":0.0,"pinching":false,"held":false,"t":0.0}],
+ "hands":[{"side":"right","lm":[[x,y,z],...21],"pinch":0.0,"pinching":false,"held":false,"t":0.0,
+           "pose":"open|fist|pinch|other","pose_conf":0.0,"palm":{"x":0.5,"y":0.5,"scale":0.12}}],
  "gaze":{"x":0.5,"y":0.5,"conf":1.0},
  "head":{"pos":[x,y,z],"quat":[x,y,z,w]}}
 {"type":"gesture","name":"pinch_start|pinch_end|...","hand":"right"}
 ```
-Hands include per-hand `t` and `held` (a repeated pose replayed during a brief detection gap). `infer_ms` rides on the frame for the HUD.
+`palm` is the filtered palm centre (landmarks 0, 5, 9, 13, 17; x is already mirrored so moving right is +x) and `scale` is wrist-to-middle-MCP size, the depth proxy. Hands include per-hand `t` and `held` (a repeated pose replayed during a brief detection gap). `infer_ms` rides on the frame for the HUD.
 
 **web → relay → other web**
 ```json
@@ -110,7 +112,7 @@ Verification legend: **unit** = Node/Python tests, **sim** = scripted simulation
 |---|---|---|
 | 1 | Scene: floor, lighting, camera, five starter blocks | Implemented |
 | 2 | Tracker streams hands to the browser | Accepted by the user (movement and responsiveness okay) |
-| 3 | Locomotion | Keyboard walking/flying, first/third person, free cam, dev overlay implemented (unit). Finger-puppet **gesture** walking not started |
+| 3 | Locomotion | Keyboard walking/flying, first/third person, free cam, dev overlay implemented (unit). Gesture locomotion implemented (unit): mode toggle plus palm joysticks, see below. Not tuned on a real hand |
 | 4 | Gaze targeting and pinch grab | Implemented, awaiting live review; accuracy unmeasured (see Known issues) |
 | 5 | Relay and second user | Implemented (unit + e2e). Not tried on two real laptops or with a real head turn |
 | 6 | Depth effect | Implemented by a teammate (unit); composes with the movement camera; untuned on a real person |
@@ -125,6 +127,13 @@ Verification legend: **unit** = Node/Python tests, **sim** = scripted simulation
 **Fast-motion work (8a, from the `optimization` branch).** `hands.js` extrapolates fast hands along their measured velocity and raises the catch-up rate with lag; in a simulation with 100 ms of camera-to-screen delay this cut lag by about 25–40% in fast moves (149 → 94 mm at 1 m/s) with identical resting jitter (**sim**), at the cost of a few millimetres of overshoot at an abrupt stop. `OneEuroFilter` hand `d_cutoff` raised to 6 (15–25% less lag when a move starts). The tracker server wakes when a frame is ready instead of polling every 1/60 s. MediaPipe confidence thresholds lowered from 0.6 to 0.5 (**unmeasured**). A `[hands]` console line every 2 s (camera fps, inference rate, detections, held frames) plus inference time and the reason the last grab ended in the HUD. A 0.5 s grip grace stops a one-frame "open pinch" flicker from dropping a block after a fast move (it has a known drift problem: see Known issues).
 
 **Movement and camera (M3, teammate).** `input.js` (intents), `locomotion.js` (walk 2 m/s, fly 4 m/s, smoothed velocity, ±20 m bound, respawn), `camera.js` (first person, third person with spring lag and zoom, free cam that is local only), `dev.js` overlay, and `MOVEMENT_CAMERA.md` as the spec. `DEV_ORBIT = false` by default (walking rig); `true` restores the mouse-orbit camera. Today's `Avatar` is a capsule torso, a sphere head with a visor, and a procedural bob, lean and body-turn.
+
+**Gesture locomotion (M3).** Spec in `GESTURE_UX.md`; temporal logic in `web/gestures.js`, HUD in `web/gesture-ui.js`, a settings dropdown (per-axis sensitivity and dead zone sliders, saved in `localStorage`) in `web/gesture-settings.js`, tunables in `GESTURE` in `web/config.js` (mutate live). Verified by unit tests only (`tests/gestures.test.mjs`); not tried with a real hand.
+- **Two modes**, so gestures never conflict. **MOVE** (the start mode): open palms are joysticks, pinch does nothing. **EDIT**: gaze selects and pinch grabs, open-palm motion does nothing. The HUD shows the mode (label, accent tint, flash and beep on change).
+- **Toggle:** both hands fist (each held 120 ms, onsets within 700 ms) arms it, then both hands open within 1.4 s fires; 0.8 s cooldown. Both hands must be visible, so a single fist never toggles. Arming zeroes the sticks. `M` is the keyboard fallback.
+- **Right hand = 3D move stick, all three axes:** push toward or pull back from the screen (palm scale) is forward/back, left/right is strafe, **raise/lower is fly up/down**. **Left hand = look:** moving right turns right, raise/lower pitches; it has its own `*_LOOK_*` dead zone and travel. Flying is always on and y is clamped to the floor; there is no walk mode or F toggle.
+- **Joystick feel:** rate control from a centre captured when the palm has been open 150 ms (so it never drifts); dead zones and `EXPO` 1.8 curves per axis; **axis isolation** damps the other axes by half when one is more than 2× the rest. A fist or a pinch on that hand is a clutch (only that stick recentres on the next open palm); a lost hand decays velocity over 150 ms. The two sticks are independent. When MediaPipe labels both hands the same side (a fist does this), `tracker/hands.py` assigns left and right by x position instead of dropping one.
+- **HUD:** two joystick widgets (look on the left, move on the right). On the move widget the dot's x is strafe, y is forward, and **dot size is height** (bigger = up). Dev overlay shows poses, palm, centres, raw/curved axes and the toggle state.
 
 **Depth effect (M6, teammate).** `web/offaxis.js`: the screen behaves like a window. The view moves with the tracked head and renders through an off-axis frustum, with a minimum eye distance, a slow neutral-depth drift, and a small gaze-lean (`GAZE_REACH_M`). Grabbing uses a head-independent hand mapping so moving your head doesn't drag a held object.
 
@@ -204,7 +213,7 @@ Ordered by dependency and ease, with no dates. Each item says why, where and whe
 - **Done when:** pure gait, spring and finger-curl functions are tested; feet stay planted while walking; no NaN in any state; headless screenshots show both users; gloves visibly follow real fingers (**live**).
 
 ### E. Carried-over milestone items
-- **M3.** Finger-puppet **gesture locomotion** on the existing intent layer.
+- **M3.** Tune the gesture sticks on a real hand (sliders in the Settings dropdown); playtest whether left/right on the right hand should strafe (now) or turn; check the right-hand vertical axis against forward drift.
 - **M4.** After A1 measure real accuracy, then use the options below. Also fix the pinch-release drift only through the grip-grace change (A2), not the release margin.
 - **M5.** Two-laptop rehearsal (including on a phone hotspot or ethernet in case venue Wi-Fi isolates clients); a tether line from a hand to the object it holds; a collapsible controls panel; persist the host scene (or migrate the host) so a reload doesn't wipe it; a reconnect banner.
 - **M6.** Tune the depth effect on a real person; make sure it still works with the set layers.
@@ -247,6 +256,8 @@ Options, roughly in order:
 - Sets are **backdrop plus grabbable props**; the host switches; on a switch **all scene objects are erased**.
 - The **object library** holds built-ins plus everything generated by voice; users add from it without re-speaking. Placed objects sync through the normal `op:add` path.
 - Avatars are **Rayman Legends style** with **procedural walking** and **hybrid hands**: floating **cartoon gloves** follow the real tracked hands, with an idle swing when no hands are visible. Cartoon gloves replace the skeleton hands.
+- **Gesture UX:** two modes (MOVE and EDIT) with separate gesture vocabularies; toggled by double fist then double open (and `M`). Python labels static poses only; JS owns the temporal state machines.
+- **Right hand is a full 3D stick** (forward/back, strafe, up/down); **left hand looks** (yaw and pitch). Flying is always on; walk mode was removed. A fist or pinch clutches that hand's stick; the centre is captured at engage and never auto-drifts.
 - No schedule in this document.
 - Pinch release: a margin relative to the tightest squeeze (`RELEASE_MARGIN` 0.10) was tried and **reverted** (grips dropped). `CLOSE` 0.40 and `OPEN` 0.46 stand. Untried and still open: anchor the grab to a palm point; freeze instead of release (this is what A2 does for the grace period).
 - WebGazer was **declined for now** (GPL-3.0, opens its own camera, same face model underneath); revisit as an A/B branch after A1.

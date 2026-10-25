@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 
 from tracker.filters import OneEuroFilter
-from tracker.gestures import GestureState
+from tracker.gestures import GestureState, classify_pose
 
 MODEL_PATH = Path(__file__).resolve().parent.parent / "hand_landmarker.task"
 MODEL_URL = (
@@ -39,12 +39,20 @@ class HandTracker:
 
     def update(self, res, now):
         live, seen = [], set()
+        raw = []
         for lm, world, handedness in zip(res.hand_landmarks, res.hand_world_landmarks, res.handedness):
             # Preserve the prototype's mirrored-camera convention.
             label = {"Left": "Right", "Right": "Left"}[handedness[0].category_name]
+            raw.append([label, landmarks_to_array(lm), landmarks_to_array(world)])
+        if len(raw) == 2 and raw[0][0] == raw[1][0]:
+            # A fist often makes MediaPipe call both hands the same side, which dropped the other hand
+            # (so one fist halted both joysticks). Two hands: the one further left in the mirrored image is left.
+            raw.sort(key=lambda r: r[1][PALM, 0].mean())
+            raw[0][0], raw[1][0] = "Left", "Right"
+        for label, lm_arr, world_arr in raw:
             key = label + "2" if label in seen else label
             seen.add(key)
-            hand = dict(key=key, label=label, lm=landmarks_to_array(lm), world=landmarks_to_array(world), t=now, held=False)
+            hand = dict(key=key, label=label, lm=lm_arr, world=world_arr, t=now, held=False)
             self.last[key] = hand
             live.append(hand)
 
@@ -101,6 +109,7 @@ class HandFrames:
             sides.add(side)
             if key not in self.states:
                 self.states[key] = dict(filter=OneEuroFilter(min_cutoff=3.0, beta=4.0, d_cutoff=6.0),
+                                        palm=OneEuroFilter(min_cutoff=1.5, beta=2.0, d_cutoff=4.0),
                                         gesture=GestureState(), packet=None)
             state = self.states[key]
             packet = state["packet"]
@@ -112,8 +121,12 @@ class HandFrames:
                 if cam is not None and np.isfinite(cam).all() and (cam[:, 2] > 0).all():
                     points = state["filter"](cam, hand["t"])
                     strength, pinching = state["gesture"].update(hand["world"])
-                    packet = dict(side=side, lm=points.tolist(), pinch=strength,
-                                  pinching=pinching, t=hand["t"])
+                    pose, pose_conf, palm_raw = classify_pose(hand["world"], hand["lm"])
+                    px, py, ps = state["palm"]([palm_raw["x"], palm_raw["y"], palm_raw["scale"]], hand["t"])
+                    packet = dict(side=side, lm=points.tolist(), pinch=strength, pinching=pinching,
+                                  pose=pose, pose_conf=round(float(pose_conf), 3),
+                                  palm=dict(x=round(float(px), 4), y=round(float(py), 4), scale=round(float(ps), 4)),
+                                  t=hand["t"])
                     state["packet"] = packet
             # Failed pose solves use the same short hold policy as failed detections.
             if packet is not None and observed_at - packet["t"] <= HOLD_TIME:

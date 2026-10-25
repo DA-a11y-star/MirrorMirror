@@ -32,9 +32,9 @@ test('walking accelerates smoothly toward walk speed and stops smoothly', () => 
   const l = new Locomotion();
   const speeds = [];
   run(1, 60, dt => { l.update(intents({ move: { forward: 1 } }), dt); speeds.push(l.vel.length()); });
-  assert.ok(speeds[0] < WALK_SPEED * 0.3, 'does not jump to full speed');
+  assert.ok(speeds[0] < FLY_SPEED * 0.3, 'does not jump to full speed');
   assert.ok(speeds.every((s, i) => i === 0 || s >= speeds[i - 1]), 'monotonic acceleration');
-  assert.ok(Math.abs(l.vel.length() - WALK_SPEED) < 0.01);
+  assert.ok(Math.abs(l.vel.length() - FLY_SPEED) < 0.01);
   assert.ok(l.pos.z < 0, 'yaw 0 walks toward -z');
   run(1, 60, dt => l.update(intents(), dt));
   assert.ok(l.vel.length() < 0.01);
@@ -54,15 +54,15 @@ test('motion is frame-rate independent', () => {
 
 test('dt is clamped so a stall does not teleport the avatar', () => {
   const l = new Locomotion();
-  l.vel.set(0, 0, -WALK_SPEED);
+  l.vel.set(0, 0, -FLY_SPEED);
   l.update(intents({ move: { forward: 1 } }), 5);
-  assert.ok(Math.abs(l.pos.z) <= WALK_SPEED * 0.05 + 1e-9);
+  assert.ok(Math.abs(l.pos.z) <= FLY_SPEED * 0.05 + 1e-9);
 });
 
 test('diagonals are not faster and strafe goes right of facing', () => {
   const l = new Locomotion();
   run(2, 60, dt => l.update(intents({ move: { forward: 1, strafe: 1 } }), dt));
-  assert.ok(l.vel.length() <= WALK_SPEED + 1e-6);
+  assert.ok(l.vel.length() <= FLY_SPEED + 1e-6);
   assert.ok(l.vel.x > 0 && l.vel.z < 0);
   const turned = new Locomotion();
   turned.yaw = Math.PI / 2; // facing -x
@@ -83,28 +83,20 @@ test('turn input is smoothed and mouse look clamps pitch', () => {
   assert.ok(Math.abs(m.yaw - 0.5) < 1e-9, 'mouse yaw turns the avatar immediately');
 });
 
-test('fly: vertical movement, no gravity, eased landing, and walking stays on the floor', () => {
+test('flying is always on: vertical works, no gravity, and y cannot go below the floor', () => {
   const l = new Locomotion();
-  l.update(intents({ toggles: { fly: true } }), 1 / 60);
   assert.equal(l.flying, true);
   run(1, 60, dt => l.update(intents({ move: { vertical: 1 } }), dt));
   assert.ok(l.pos.y > 1.5);
   const hover = l.pos.y;
   run(1, 60, dt => l.update(intents(), dt));
-  assert.ok(Math.abs(l.pos.y - hover) < 0.4, 'no gravity while flying');
+  assert.ok(Math.abs(l.pos.y - hover) < 0.4, 'no gravity');
   run(1, 60, dt => l.update(intents({ move: { vertical: -1 } }), dt));
   assert.ok(l.vel.length() <= FLY_SPEED + 1e-6);
   const high = new Locomotion();
-  high.flying = true;
-  high.pos.y = 5;
-  high.update(intents({ toggles: { fly: true } }), 1 / 60);
-  const first = high.pos.y;
-  assert.ok(first > 4 && first < 5, 'does not snap straight down');
-  run(3, 60, dt => high.update(intents(), dt));
+  high.pos.y = 0.2;
+  run(1, 60, dt => high.update(intents({ move: { vertical: -1 } }), dt));
   assert.equal(high.pos.y, 0);
-  const walker = new Locomotion();
-  run(1, 60, dt => walker.update(intents({ move: { vertical: 1 } }), dt));
-  assert.equal(walker.pos.y, 0, 'space does nothing when walking');
 });
 
 test('avatar stays inside the world bound; reset respawns at the origin', () => {
@@ -115,18 +107,18 @@ test('avatar stays inside the world bound; reset respawns at the origin', () => 
   l.flying = true;
   l.pos.y = 3;
   l.update(intents({ toggles: { reset: true } }), 1 / 60);
-  assert.ok(l.pos.length() < 0.01 && l.yaw === 0 && !l.flying);
+  assert.ok(l.pos.length() < 0.01 && l.yaw === 0 && l.flying);
 });
 
 test('disabled locomotion (free cam) ignores every intent and coasts to rest', () => {
   const l = new Locomotion();
   run(1, 60, dt => l.update(intents({ move: { forward: 1 } }), dt));
   const before = l.pos.clone();
-  run(2, 60, dt => l.update(intents({ move: { forward: 1 }, turn: 1, look: { dYaw: 1 }, toggles: { fly: true, reset: true } }), dt, false));
-  assert.equal(l.flying, false);
+  run(2, 60, dt => l.update(intents({ move: { forward: 1 }, turn: 1, look: { dYaw: 1 }, toggles: { reset: true } }), dt, false));
+  assert.equal(l.flying, true);
   assert.equal(l.yaw, 0);
   assert.ok(l.vel.length() < 0.01);
-  assert.ok(l.pos.distanceTo(before) < WALK_SPEED * 0.4, 'only the remaining momentum');
+  assert.ok(l.pos.distanceTo(before) < FLY_SPEED * 0.4, 'only the remaining momentum');
 });
 
 function rigAt(l, camera = new THREE.PerspectiveCamera(55, 1.6, 0.05, 100), options = { firstPerson: false }) {
@@ -319,15 +311,15 @@ test('input: keys become intents, toggles fire for one frame, taps shorter than 
   key('keyup', 'ShiftLeft');
   assert.equal(input.poll().move.vertical, 1);
 
-  for (const [code, name] of [['KeyF', 'fly'], ['KeyV', 'view'], ['KeyC', 'freeCam'], ['Backquote', 'dev'], ['KeyP', 'depthFx'], ['KeyR', 'reset'], ['KeyH', 'recenter']]) {
+  for (const [code, name] of [['KeyM', 'mode'], ['KeyV', 'view'], ['KeyC', 'freeCam'], ['Backquote', 'dev'], ['KeyP', 'depthFx'], ['KeyR', 'reset'], ['KeyH', 'recenter']]) {
     key('keydown', code);
     assert.equal(input.poll().toggles[name], true, name);
     assert.equal(input.poll().toggles[name], false, `${name} lasts one frame`);
   }
-  key('keydown', 'KeyF');
-  key('keydown', 'KeyF', { repeat: true });
+  key('keydown', 'KeyM');
+  key('keydown', 'KeyM', { repeat: true });
   input.poll();
-  assert.equal(input.poll().toggles.fly, false, 'auto-repeat does not retrigger');
+  assert.equal(input.poll().toggles.mode, false, 'auto-repeat does not retrigger');
 });
 
 test('input: prevents page scroll on arrows/space, ignores modified keys, clears on blur', async () => {

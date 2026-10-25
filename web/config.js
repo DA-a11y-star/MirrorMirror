@@ -25,3 +25,28 @@ export const PARALLAX_STRENGTH = 1;
 
 // true = old mouse-orbit camera with no avatar. false = the avatar and camera rig (movement and camera modes).
 export const DEV_ORBIT = false;
+
+// Gesture locomotion. Mutate this object from the console or the dev sliders; the next frame picks it up.
+export const GESTURE = {
+  DOMINANT: 'right',           // open right hand = move; open left hand = look left/right
+  DEAD_LATERAL: 0.28,
+  DEAD_VERTICAL: 0.28,
+  DEAD_DEPTH: 0.08,
+  FULL_LATERAL: 1.6,           // right strafe / left look-yaw
+  FULL_VERTICAL: 1.8,          // right fly up/down, left look-pitch
+  DEAD_LOOK_LATERAL: 0.28,      // left-hand look has its own dead zone and travel
+  DEAD_LOOK_VERTICAL: 0.28,
+  FULL_LOOK_LATERAL: 0.9,
+  FULL_LOOK_VERTICAL: 1.1,
+  FULL_DEPTH: 0.4,             // right forward/back — larger = less sensitive
+  EXPO: 1.8,
+  ENGAGE_MS: 150,
+  DISENGAGE_MS: 150,           // how long velocity decays to zero after a fist / lost hand
+  LOW_CONF_MS: 100,            // pose_conf below 0.5 this long disengages
+  TOGGLE_FIST_MS: 120,
+  TOGGLE_ONSET_MS: 700,        // the two fists must start within this of each other
+  TOGGLE_OPEN_WINDOW_MS: 1400,
+  TOGGLE_COOLDOWN_MS: 800,
+  AXIS_ISOLATION: 2,           // if one axis is this many times the others, damp the others
+  AXIS_ISOLATION_SCALE: 0.5,
+};

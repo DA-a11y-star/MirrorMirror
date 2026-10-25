@@ -12,7 +12,7 @@ from websockets.asyncio.server import serve
 
 from tracker.capture import LatestValue
 from tracker.filters import OneEuroFilter
-from tracker.gestures import GestureState, PinchEvents
+from tracker.gestures import FINGERS, GestureState, PinchEvents, classify_pose
 from tracker.hands import HOLD_TIME, HandFrames, camera_matrix
 from tracker.main import TrackerServer
 
@@ -54,6 +54,9 @@ class HandFrameTests(unittest.TestCase):
         np.testing.assert_allclose(hand["lm"], expected, atol=1e-5)
         self.assertTrue(hand["pinching"])
         self.assertFalse(hand["held"])
+        self.assertIn(hand["pose"], {"open", "fist", "pinch", "other"})
+        self.assertTrue(0 <= hand["pose_conf"] <= 1)
+        self.assertGreater(hand["palm"]["scale"], 0)
         self.assertIsNone(frame["head"])
         self.assertIsNone(frame["gaze"])
         json.dumps(frame, allow_nan=False)
@@ -96,8 +99,66 @@ class HandFrameTests(unittest.TestCase):
         hands = HandFrames().update(right, 1.0, 640, 480)["hands"]
         self.assertEqual({h["side"] for h in hands}, {"left", "right"})
         right.handedness[1][0].category_name = "Left"
+        # Both labelled the same side (a fist does this): keep both, assigned by x, so one fist can't hide the other hand.
         hands = HandFrames().update(right, 1.0, 640, 480)["hands"]
-        self.assertEqual(len(hands), 1)
+        self.assertEqual({h["side"] for h in hands}, {"left", "right"})
+
+    def _shaped_hand(self, kind):
+        world = np.zeros((21, 3))
+        for i, x in ((5, .02), (9, 0), (13, -.02), (17, -.04)):
+            world[i] = [x, -.05, 0]
+        if kind == "open":
+            for tip, pip, mcp in FINGERS:
+                world[pip] = world[mcp] + [0, -.04, 0]
+                world[tip] = world[mcp] + [0, -.09, 0]
+            world[4] = [.05, -.06, 0]
+            world[8] = [.02, -.14, 0]
+        elif kind == "fist":
+            for tip, pip, mcp in FINGERS:
+                world[pip] = world[mcp] + [0, -.01, 0]
+                world[tip] = world[mcp] + [0, .02, 0]
+            world[4] = world[8] = [.0, -.03, 0]
+        elif kind == "pinch":
+            for tip, pip, mcp in FINGERS:
+                world[pip] = world[mcp] + [0, -.04, 0]
+                world[tip] = world[mcp] + [0, -.09, 0]
+            world[4] = world[8] = [.02, -.14, 0]
+        else:
+            world[8] = world[6] = world[5] + [0, -.02, 0]
+            world[12] = world[9] + [0, -.09, 0]
+        image = world.copy()
+        image[:, 0] += .5
+        image[:, 1] += .4
+        return world, image
+
+    def test_pose_classes_and_ambiguous_is_other(self):
+        pose, conf, palm = classify_pose(*self._shaped_hand("open"))
+        self.assertEqual(pose, "open")
+        self.assertGreater(conf, .5)
+        self.assertAlmostEqual(palm["x"], .5 + np.mean([0, .02, 0, -.02, -.04]), places=5)
+        pose, _, _ = classify_pose(*self._shaped_hand("fist"))
+        self.assertEqual(pose, "fist")
+        pose, _, _ = classify_pose(*self._shaped_hand("pinch"))
+        self.assertEqual(pose, "pinch")
+        pose, _, _ = classify_pose(*self._shaped_hand("other"))
+        self.assertEqual(pose, "other")
+        three = self._shaped_hand("fist")
+        three[0][8] = three[0][5] + [0, -.09, 0]  # index extended; 3 fingers still a fist
+        pose, _, _ = classify_pose(*three)
+        self.assertEqual(pose, "fist")
+
+    def test_palm_grows_as_the_hand_approaches_and_x_is_user_right(self):
+        world, image = self._shaped_hand("open")
+        near_image = image.copy()
+        near_image[:, :2] *= 1.4
+        _, _, near = classify_pose(world, near_image)
+        _, _, far = classify_pose(world, image)
+        self.assertGreater(near["scale"], far["scale"])
+        shifted = image.copy()
+        shifted[:, 0] += .1
+        _, _, right = classify_pose(world, shifted)
+        _, _, mid = classify_pose(world, image)
+        self.assertGreater(right["x"], mid["x"])
 
     def test_index_pinch_hysteresis(self):
         state = GestureState()

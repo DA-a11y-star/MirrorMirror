@@ -45,7 +45,13 @@ function posedHand(spec, t) {
     hz + 0.06 * Math.sin(t * 0.45 + spec.phase),
   );
   const lm = pts.map((p) => p.applyMatrix4(turn).add(offset).toArray().map((v) => +v.toFixed(4)));
-  return { side: spec.side, lm, pinch: +pinch.toFixed(3) };
+  const palm = {
+    x: +(0.5 + spec.home[0] + 0.08 * Math.sin(t * 0.7 + spec.phase)).toFixed(4),
+    y: +(0.5 + spec.home[1] * 0.4 + 0.04 * Math.sin(t * 1.1 + spec.phase)).toFixed(4),
+    scale: +(0.12 + 0.03 * Math.sin(t * 0.45 + spec.phase)).toFixed(4),
+  };
+  const pose = pinch > 0.7 ? 'pinch' : 'open';
+  return { side: spec.side, lm, pinch: +pinch.toFixed(3), pose, pose_conf: 0.9, palm };
 }
 
 export function startMockTracker(onMessage) {

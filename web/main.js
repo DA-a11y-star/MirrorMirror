@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { DEV_ORBIT, GAZE_SOURCE, HOST_ID, PARALLAX_STRENGTH, RELAY_URL, TRACKER_SOURCE, TRACKER_URL, USER_ID, VOICE_URL } from './config.js';
+import { DEV_ORBIT, GAZE_SOURCE, GESTURE, HOST_ID, PARALLAX_STRENGTH, RELAY_URL, TRACKER_SOURCE, TRACKER_URL, USER_ID, VOICE_URL } from './config.js';
 import { RemoteAvatar } from './remote-avatar.js';
 import { OffAxis } from './offaxis.js';
 import { Hands } from './hands.js';
@@ -19,6 +19,8 @@ import { CameraRig } from './camera.js';
 import { Dev } from './dev.js';
 import { Objects } from './objects.js';
 import { VoiceUI } from './voice-ui.js';
+import { Gestures } from './gestures.js';
+import { GestureUI } from './gesture-ui.js';
 
 const STATE_HZ = 30; // how often this laptop sends its state to the other
 
@@ -45,9 +47,11 @@ const input = new Input(renderer.domElement);
 const locomotion = new Locomotion({ spawn: SPAWNS[USER_ID] ?? SPAWNS.A });
 const avatar = new Avatar(scene);
 const rig = new CameraRig(camera);
+const gestures = new Gestures(GESTURE);
+const gestureUI = new GestureUI(gestures);
 const dev = new Dev(scene, blocks);
 let depthFx = true;
-Object.assign(window.app, { input, locomotion, avatar, rig, dev, avatarState: () => locomotion.state() });
+Object.assign(window.app, { input, locomotion, avatar, rig, gestures, gestureUI, dev, avatarState: () => locomotion.state() });
 
 const controls = DEV_ORBIT ? new OrbitControls(camera, renderer.domElement) : null;
 if (controls) {
@@ -153,7 +157,10 @@ renderer.setAnimationLoop(() => {
   frameMs += (dt * 1000 - frameMs) * 0.1;
 
   // Keys are ignored while the calibration overlay is up. Free cam only moves the camera, never the avatar.
+  gestures.setFrame(tracker.frame?.hands ?? [], now);
   const intents = gaze.calibrating ? emptyIntents() : input.poll();
+  if (intents.toggles.mode) gestures.toggleMode();
+  gestures.apply(intents);
   if (intents.toggles.dev) dev.toggle();
   if (intents.toggles.recenter) offAxis.recenter();
   if (intents.toggles.depthFx) {
@@ -178,10 +185,11 @@ renderer.setAnimationLoop(() => {
   sync.update(dt, now, heldIds());
   for (const peer of peers.values()) peer.update(dt, now);
   interaction.setRemote(new Set(sync.holders.keys()), new Set([...peers.values()].map(peer => peer.looking).filter(Boolean)));
-  interaction.update(gaze.get(now), !gaze.calibrating, now);
+  interaction.update(gaze.get(now), !gaze.calibrating && gestures.mode === 'EDIT', now);
   gazeUI.update(now, interaction.target?.userData.id, [...interaction.grabs.values()].map(g => g.mesh.userData.id).join(', '));
+  gestureUI.update();
   dev.update({
-    fps: fpsShown, frameMs, rig, locomotion, intents, camera, view,
+    fps: fpsShown, frameMs, rig, locomotion, intents, camera, view, gestures,
     tracker, gaze: gaze.get(now), gazeTargetId: interaction.target?.userData.id, gazeTargetObject: interaction.target, now,
   });
   renderer.render(scene, view);
@@ -204,7 +212,7 @@ renderer.setAnimationLoop(() => {
     const others = [...peers.values()].filter(peer => peer.live).map(peer => peer.user).join(', ');
     const link = `${net.status}${net.open ? (others ? ` with ${others}` : '') : ` ${RELAY_URL}`}`; // a wrong address shows here
     const infer = tracker.frame?.infer_ms != null ? ` (${tracker.frame.infer_ms} ms)` : '';
-    hud.textContent = `user ${USER_ID}  ·  ${fps} fps  ·  tracker ${tracker.status} ${trackerHz} Hz${infer}  ·  relay ${link}  ·  ${parallax}  ·  ${tracker.lastGesture}  ·  ${interaction.lastEnd}`;
+    hud.textContent = `user ${USER_ID}  ·  ${gestures.mode}  ·  ${fps} fps  ·  tracker ${tracker.status} ${trackerHz} Hz${infer}  ·  relay ${link}  ·  ${parallax}  ·  ${tracker.lastGesture}  ·  ${interaction.lastEnd}`;
     frames = 0;
     tracker.frames = 0;
     lastHud = now;

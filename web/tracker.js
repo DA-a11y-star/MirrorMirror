@@ -11,6 +11,12 @@ export function validFrame(msg) {
     if (!Number.isFinite(hand.pinch) || hand.pinch < 0 || hand.pinch > 1 || typeof hand.pinching !== 'boolean') return false;
     if (!Array.isArray(hand.lm) || hand.lm.length !== 21) return false;
     if (!hand.lm.every(p => Array.isArray(p) && p.length === 3 && p.every(Number.isFinite))) return false;
+    if (hand.pose != null && !['open', 'fist', 'pinch', 'other'].includes(hand.pose)) return false;
+    if (hand.pose_conf != null && (!Number.isFinite(hand.pose_conf) || hand.pose_conf < 0 || hand.pose_conf > 1)) return false;
+    if (hand.palm != null) {
+      const { x, y, scale } = hand.palm;
+      if (![x, y, scale].every(Number.isFinite) || scale <= 0) return false;
+    }
   }
   return true;
 }

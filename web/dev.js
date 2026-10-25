@@ -74,14 +74,21 @@ export class Dev {
     const toggled = Object.entries(intents.toggles).filter(([, on]) => on).map(([name]) => name).join(',') || '-';
     this.panel.textContent = [
       `fps ${info.fps}   frame ${f(info.frameMs, 1)} ms`,
-      `mode  ${loco.flying ? 'fly' : 'walk'} · ${rig.mode}`,
+      `mode  ${info.gestures?.mode ?? '-'} · ${rig.mode}`,
       `avatar  ${vec(loco.pos)}  yaw ${deg(loco.yaw)}  pitch ${deg(loco.pitch)}`,
       `camera  ${vec(camera.position)}`,
       `intents  move(f s v) ${tint}  turn ${f(intents.turn, 0)}`,
       `         look ${f(intents.look.dYaw, 3)}, ${f(intents.look.dPitch, 3)}  zoom ${f(intents.zoom, 1)}  toggles ${toggled}`,
       `tracker  ${tracker.status}${age === null ? '' : `, last frame ${age} ms ago`}`,
-      `relay  not built (peers 0)`,
+      `relay  ${info.net ? `${info.net.status} peers ${info.net.open ? 1 : 0}` : '—'}`,
       `gaze target  ${info.gazeTargetId ?? '-'}`,
+      ...(info.gestures ? [
+        `toggle  ${info.gestures.toggle.state}${info.gestures.joy.engaged ? '  joystick ON' : ''}`,
+        `hands   ${info.gestures.debug().hands}`,
+        `center  ${info.gestures.debug().center}`,
+        `raw     Δ ${f(info.gestures.joy.raw.lateral, 2)} ${f(info.gestures.joy.raw.vertical, 2)} ${f(info.gestures.joy.raw.depth, 2)}`,
+        `curve   ${f(info.gestures.joy.curved.lateral, 2)} ${f(info.gestures.joy.curved.vertical, 2)} ${f(info.gestures.joy.curved.depth, 2)}`,
+      ] : []),
     ].join('\n');
 
     this.springMarker.position.copy(rig.tpWant);
