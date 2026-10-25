@@ -25,7 +25,6 @@ export const SETS = {
     // Rendering budget. The model is split into `chunk`-metre cells so the camera can skip what is out of view, and the
     // far plane is the fog's end, so nothing beyond the haze is ever drawn. Scenery casts and receives no shadows: it is
     // lit by its own neon, and a shadow pass over a 138 m city would cost more than it shows.
-    bound: 90, // half size of the square avatars may walk and fly in (the model is 138 x 132 m)
     ceiling: 60, // the towers are 46 m; flying above them is the best view
     chunk: 64,
     shadows: { castShadow: false, receiveShadow: false },
@@ -96,8 +95,8 @@ export const SETS = {
     center: [0, 9],
     floor: 0,
     shadows: { castShadow: true },
-    // A dragon circles above the town (dragon.js): its lowest flight clears the tallest roof (9.2 m) by a few metres.
-    dragon: { center: [0, 0], radius: [22, 34], height: [13, 19], speed: 8 },
+    // A dragon circles above and around the town, wider than its wall (dragon.js): its lowest flight clears the tallest roof (9.2 m) by a few metres.
+    dragon: { center: [0, 9], radius: [44, 60], height: [13, 19], speed: 8 },
     // Warm afternoon. The model's ground plane was removed, so the room floor shows through the courtyards: packed earth.
     environment: {
       background: 0xb9d6ec, fog: [0xe9e2d4, 45, 130], hemisphere: [0xfff3df, 0x8c7c62, 1.3],

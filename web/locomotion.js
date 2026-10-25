@@ -24,7 +24,7 @@ export class Locomotion {
   // `spawn` is where (re)spawning puts the avatar: { pos: [x, y, z], yaw, pitch }. Defaults to the origin.
   // `bound` is the half size of the square the avatar stays in and `ceiling` its highest altitude (a big set raises both).
   constructor({ spawn = {}, bound = WORLD_BOUND, ceiling = FLY_CEILING } = {}) {
-    this.bound = bound;
+    this.limits = { minX: -bound, maxX: bound, minZ: -bound, maxZ: bound }; // the edge of the world, a rectangle
     this.ceiling = ceiling;
     this.spawn = { pos: [0, 0, 0], yaw: 0, pitch: 0, ...spawn };
     this.pos = new THREE.Vector3();
@@ -40,6 +40,11 @@ export class Locomotion {
     this._r = new THREE.Vector3();
     this._target = new THREE.Vector3();
     this.respawn();
+  }
+
+  // The edge of the world for a set: a box {minX, maxX, minZ, maxZ} (a model set passes its model's footprint).
+  setLimits(box) {
+    this.limits = { minX: box.minX, maxX: box.maxX, minZ: box.minZ, maxZ: box.maxZ };
   }
 
   respawn() {
@@ -81,8 +86,8 @@ export class Locomotion {
 
     const wasY = this.pos.y;
     this.pos.addScaledVector(this.vel, dt);
-    this.pos.x = THREE.MathUtils.clamp(this.pos.x, -this.bound, this.bound);
-    this.pos.z = THREE.MathUtils.clamp(this.pos.z, -this.bound, this.bound);
+    this.pos.x = THREE.MathUtils.clamp(this.pos.x, this.limits.minX, this.limits.maxX);
+    this.pos.z = THREE.MathUtils.clamp(this.pos.z, this.limits.minZ, this.limits.maxZ);
     // Never below the floor under you. `floorAt(x, z)` (set by the world) knows about decks and raised paths. Stepping
     // onto a higher floor lifts you smoothly; pressing down into a floor you are already on just stops at it.
     this.pos.y = Math.max(this.pos.y, 0);

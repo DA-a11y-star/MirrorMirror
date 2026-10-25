@@ -5,7 +5,7 @@ import { load } from './load.mjs';
 
 const { Dragon, DRAGON_DEFAULTS, dragonPose, makePath, pointAt, radiusAt } = await load('dragon');
 // The Chinese City's settings, so the test checks what ships (roofs there reach 9.2 m).
-const CITY = { center: [0, 0], radius: [22, 34], height: [13, 19], speed: 8 };
+const CITY = { center: [0, 9], radius: [44, 60], height: [13, 19], speed: 8 };
 const ROOF = 9.2;
 const times = Array.from({ length: 40 }, (_, i) => i * 1.37);
 
@@ -15,8 +15,8 @@ test('the flight path is a closed loop that keeps to its radius and height range
   const p = new THREE.Vector3();
   for (let s = 0; s < path.length; s += 1.7) {
     pointAt(path, s, p);
-    const r = Math.hypot(p.x, p.z);
-    assert.ok(r > 21 && r < 35, `radius ${r}`);
+    const r = Math.hypot(p.x - CITY.center[0], p.z - CITY.center[1]);
+    assert.ok(r > 43 && r < 61, `radius ${r}`);
     assert.ok(p.y > 12.9 && p.y < 19.1, `height ${p.y}`);
   }
 });
