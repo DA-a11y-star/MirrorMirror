@@ -148,6 +148,10 @@ test('every set with a model points at a valid .glb in web/, with a credit, a sa
     assert.equal(bytes.readUInt32LE(4), 2, 'glTF version 2');
     assert.equal(bytes.readUInt32LE(8), (await stat(file)).size, 'GLB length matches the file (not truncated)');
     const json = JSON.parse(bytes.toString('utf8', 20, 20 + bytes.readUInt32LE(12)));
-    assert.ok(!(json.extensionsRequired ?? []).length, `${id} needs extensions the loader may lack: ${json.extensionsRequired}`);
+    // Whatever the model requires must be something the vendored GLTFLoader implements (its source names each one).
+    const loaderSource = await readFile(new URL('../web/vendor/addons/loaders/GLTFLoader.js', import.meta.url), 'utf8');
+    for (const extension of json.extensionsRequired ?? []) {
+      assert.ok(loaderSource.includes(extension), `${id} needs ${extension}, which the vendored loader does not implement`);
+    }
   }
 });

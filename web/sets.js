@@ -96,13 +96,31 @@ export const SETS = {
     floor: 0,
     shadows: { castShadow: true },
     // A dragon circles above and around the town, wider than its wall (dragon.js): its lowest flight clears the tallest roof (9.2 m) by a few metres.
-    dragon: { center: [0, 9], radius: [44, 60], height: [13, 19], speed: 8 },
+    dragon: { center: [0, 9], radius: [44, 60], height: [13, 19], speed: 8, tempo: 0.5 }, // tempo 0.5: the whole animation at half speed
     // Warm afternoon. The model's ground plane was removed, so the room floor shows through the courtyards: packed earth.
     environment: {
       background: 0xb9d6ec, fog: [0xe9e2d4, 45, 130], hemisphere: [0xfff3df, 0x8c7c62, 1.3],
       sun: [0xfff0d6, 1.7], floor: 0xa89a80, grid: false,
     },
     credit: '"Low poly Chinese city" by smooth998 (https://sketchfab.com/smooth998), CC BY 4.0',
+  },
+  neighbourhood: {
+    name: 'Neighbourhood',
+    model: 'assets/neighbourhood/neighbourhood_city.glb',
+    // A 42 x 39 m street block at real-world size (buildings up to 14 m), so it is walkable at 1x. It is dense: measured by
+    // rasterising every triangle taller than 0.6 m, the biggest clear ground is a yard on the west side, about 8 x 12 m.
+    // `center` puts the middle of that yard (model coordinates (-11, -9.5)) on the origin, where the blocks and both spawns
+    // are. `floor` is the paving's height in the model (about 0).
+    scale: 1,
+    center: [13.7, 7.85],
+    floor: 0,
+    shadows: { castShadow: true },
+    environment: {
+      background: 0xa9cdee, fog: [0xdfe9ee, 45, 130], hemisphere: [0xeef5ff, 0x7b8a6a, 1.1],
+      sun: [0xfff1d6, 1.5], floor: 0x7c8f6a, grid: false,
+      floorSize: 400, // the plain room's floor is 60 m and this model is 42 m across: enlarged so its edge never shows
+    },
+    credit: '"Neighbourhood City Modular lowpoly" by golukumar (https://sketchfab.com/mortalityrexotable), Sketchfab Standard license',
   },
 };
 

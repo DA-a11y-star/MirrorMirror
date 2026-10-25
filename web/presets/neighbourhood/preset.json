@@ -1,0 +1,39 @@
+{
+ "format": "mirrormirror.preset",
+ "version": 1,
+ "id": "neighbourhood",
+ "name": "Neighbourhood",
+ "description": "A low-poly neighbourhood: streets, houses, shops and parked cars.",
+ "tint": "#3fa57a",
+ "view": {
+  "yaw": 0,
+  "pitch": 4
+ },
+ "environment": {
+  "sky": [
+   "#7fb4e8",
+   "#e8efe6"
+  ],
+  "fog": [
+   "#dfe9ee",
+   45,
+   130
+  ],
+  "ground": "#7c8f6a",
+  "sun": {
+   "color": "#fff1d6",
+   "intensity": 1.2,
+   "position": [
+    -8,
+    12,
+    6
+   ]
+  },
+  "ambient": [
+   "#eef5ff",
+   "#7b8a6a",
+   0.9
+  ]
+ },
+ "objects": {}
+}

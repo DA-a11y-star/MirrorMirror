@@ -528,3 +528,28 @@ test('avatar hands go back to their resting spots when told to (`rest`), and fol
   assert.ok(again.distanceTo(following) < 1e-3, 'and follows the hand again when the flag clears');
   assert.ok(avatar.gloves[0].position.distanceTo(avatar.gloves[0].userData.rest) < 1e-6, 'the other hand is untouched');
 });
+
+test('avatar head: follows the view exactly, adds the real head\'s turn on top, eases into it and settles back', () => {
+  const avatar = new Avatar(new THREE.Scene());
+  const state = { pos: [0, 0, 0], vel: [0, 0, 0], yaw: 0.5, pitch: 0.2, flying: true };
+  const view = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.2, 0.5, 0, 'YXZ'));
+  const run = (frames, dt = 1 / 60) => { for (let i = 0; i < frames; i++) avatar.update(state, dt); };
+  run(30);
+  assert.equal(avatar.head.rotation.y, 0.5);
+  assert.equal(avatar.head.rotation.x, 0.2, 'with no head data it is exactly the view');
+
+  const turn = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0.6);
+  avatar.setHeadTurn(turn);
+  run(2);
+  const early = avatar.head.quaternion.angleTo(view);
+  assert.ok(early > 0.01 && early < 0.55, `it eases in rather than snapping (${early})`);
+  run(120);
+  const want = view.clone().multiply(turn);
+  assert.ok(avatar.head.quaternion.angleTo(want) < 0.01, 'it ends on the view turned by the real head');
+  assert.ok(Math.abs(avatar.head.quaternion.angleTo(view) - 0.6) < 0.01, 'by the amount the real head turned');
+
+  avatar.setHeadTurn(null);
+  run(240);
+  assert.ok(avatar.head.quaternion.angleTo(view) < 0.001, 'with the head data gone it settles back to the view');
+  assert.equal(avatar.head.rotation.y, 0.5, 'and is exactly the view again');
+});

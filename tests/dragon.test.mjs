@@ -85,3 +85,17 @@ test('thickness tapers from a thick body to a thin tail and defaults are sane', 
   assert.ok(radiusAt(n - 1, n) < radiusAt(Math.floor(n * 0.15), n) * 0.3, 'a thin tail');
   assert.ok(DRAGON_DEFAULTS.radius[0] < DRAGON_DEFAULTS.radius[1] && DRAGON_DEFAULTS.height[0] < DRAGON_DEFAULTS.height[1]);
 });
+
+test('tempo 0.5 slows the whole dragon by half: at t seconds it is where the full-speed one was at t / 2', () => {
+  const full = makePath({ ...CITY });
+  const slow = makePath({ ...CITY, tempo: 0.5 });
+  for (const t of [3, 10.5, 47]) {
+    const a = dragonPose(slow, t);
+    const b = dragonPose(full, t / 2);
+    for (let i = 0; i < a.length; i++) assert.ok(a[i].distanceTo(b[i]) < 1e-9, `segment ${i} at ${t}s`);
+  }
+  // The head covers half the distance in the same time.
+  const travelled = (path, t) => dragonPose(path, t + 1)[0].distanceTo(dragonPose(path, t)[0]);
+  assert.ok(travelled(slow, 20) < travelled(full, 20) * 0.55 && travelled(slow, 20) > travelled(full, 20) * 0.45, 'about half the speed');
+  assert.equal(DRAGON_DEFAULTS.tempo, 1, 'other sets are unchanged by default');
+});

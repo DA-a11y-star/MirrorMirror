@@ -13,6 +13,7 @@ export const DRAGON_DEFAULTS = {
   radius: [22, 34],      // m: nearest and farthest the loop gets from the centre
   height: [12, 18],      // m: lowest and highest the centre of the body flies
   speed: 8,              // m/s along the path
+  tempo: 1,              // clock speed of the whole animation: flight, body wave, whiskers and legs. 0.5 = half speed
   size: 1,               // scales the thickness (the length follows `segments` * `spacing`)
   segments: 46,
   spacing: 0.9,          // m between body segments along the path
@@ -60,7 +61,8 @@ const envelope = (i, n) => 0.25 + 0.75 * Math.sin(Math.PI * Math.min(1, (i + 2) 
 // ahead of it, searching back along the path for the spot where the waved point lands that far away; just stepping a
 // fixed distance along the path would stretch the body wherever the wave is steep.
 export function dragonPose(path, time, out = []) {
-  const { segments, spacing, speed } = path.cfg;
+  const { segments, spacing, speed, tempo } = path.cfg;
+  time *= tempo; // one clock for everything, so a slower dragon flies, undulates and flutters slower together
   const tmp = new THREE.Vector3();
   let s = time * speed;
   out[0] ??= new THREE.Vector3();
@@ -212,8 +214,9 @@ export class Dragon {
 
   // Puts the dragon where it should be at `time` seconds. Pass the wall clock so every laptop agrees.
   update(time = Date.now() / 1000) {
-    const { segments } = this.path.cfg;
-    const pose = dragonPose(this.path, time, this.pose);
+    const { segments, tempo } = this.path.cfg;
+    const pose = dragonPose(this.path, time, this.pose); // scales the clock by `tempo` itself
+    const t = time * tempo; // the head tilt, whiskers and legs run on that same slower clock
     const { _m: m, _q: q, _s: s, _f: f, _r: r, _u: u, _p: p } = this;
     const basis = (i, out) => { // forward (toward the head), then a level right and an up that follow the body
       f.subVectors(pose[Math.max(0, i - 1)], pose[Math.min(segments - 1, i + 1)]).normalize();
@@ -245,10 +248,10 @@ export class Dragon {
     // Head: faces along the path and banks into the turn, with a little nod.
     basis(0, m);
     this.head.position.copy(pose[0]).addScaledVector(f, this.size * 0.6);
-    this.head.quaternion.setFromRotationMatrix(m).multiply(this._tilt(0.12 * Math.sin(time * 2.4)));
+    this.head.quaternion.setFromRotationMatrix(m).multiply(this._tilt(0.12 * Math.sin(t * 2.4)));
     for (const whisker of this.whiskers) {
       // Tipped back until it trails behind the head (x), swept out to the side (z), and fluttering in the wind.
-      const flutter = Math.sin(time * 5 + whisker.userData.side * 1.7);
+      const flutter = Math.sin(t * 5 + whisker.userData.side * 1.7);
       whisker.rotation.set(1.2 + 0.18 * flutter, 0, whisker.userData.side * (0.45 + 0.12 * flutter));
     }
 
@@ -258,7 +261,7 @@ export class Dragon {
       q.setFromRotationMatrix(m);
       leg.position.copy(pose[segment]).addScaledVector(r, side * radiusAt(segment, segments, this.size) * 0.85)
         .addScaledVector(u, -radiusAt(segment, segments, this.size) * 0.5);
-      leg.quaternion.copy(q).multiply(this._tilt(-0.55 + 0.35 * Math.sin(time * 3 + segment)));
+      leg.quaternion.copy(q).multiply(this._tilt(-0.55 + 0.35 * Math.sin(t * 3 + segment)));
     }
 
     const last = segments - 1;
@@ -266,7 +269,7 @@ export class Dragon {
     q.setFromRotationMatrix(m);
     this.tuft.forEach((mesh, n) => {
       mesh.position.copy(pose[last]).addScaledVector(f, -0.8 - n * 0.2).addScaledVector(r, (n - 1) * 0.35);
-      mesh.quaternion.copy(q).multiply(this._tilt(-1.9 - 0.12 * Math.sin(time * 4 + n)));
+      mesh.quaternion.copy(q).multiply(this._tilt(-1.9 - 0.12 * Math.sin(t * 4 + n)));
     });
   }
 
