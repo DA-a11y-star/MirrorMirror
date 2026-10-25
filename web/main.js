@@ -21,7 +21,7 @@ import { GazeUI } from './gaze-ui.js';
 import { Interaction } from './interaction.js';
 import { round, SceneSync } from './sync.js';
 import { emptyIntents, Input } from './input.js';
-import { FLY_CEILING, Locomotion, WORLD_BOUND } from './locomotion.js';
+import { FLY_CEILING, Locomotion } from './locomotion.js';
 import { Avatar, EYE_HEIGHT } from './avatar.js';
 import { CameraRig } from './camera.js';
 import { Dev } from './dev.js';
@@ -121,16 +121,20 @@ window.app.setReady = loadSetModel(set, scene, new GLTFLoader()).then(root => {
 // Avatar, camera rig and input. Keys and mouse are read only in input.js; everything below consumes intents.
 const input = new Input(renderer.domElement, { mouseFallback: TRACKER_SOURCE === 'mouse' });
 // Each user spawns at their own end of the blocks, a few steps back, looking down at them.
-// A set with a workspace moves the blocks and both spawns there, and a big one raises the walking bound to cover it.
+// A set with a workspace moves the blocks and both spawns there. A model set's world ends where its model does (below).
 const spawn = SPAWNS[USER_ID] ?? SPAWNS.A;
 const [shiftX, shiftZ] = set.workspace ?? [0, 0];
 const locomotion = new Locomotion({
   spawn: { ...spawn, pos: [spawn.pos[0] + shiftX, spawn.pos[1], spawn.pos[2] + shiftZ] },
-  bound: set.bound ?? WORLD_BOUND,
   ceiling: set.ceiling ?? FLY_CEILING,
 });
 // The set's extras (parked and hovering cars, Eve and Wall-E by the blocks, the airship), built once the city is in.
 let setProps = null;
+window.app.setReady.then(city => { // the edge of the world is the edge of the set's model: a town's wall, the end of a city
+  if (!city) return;
+  const box = new THREE.Box3().setFromObject(city);
+  locomotion.setLimits({ minX: set.bound?.minX ?? box.min.x + 0.5, maxX: set.bound?.maxX ?? box.max.x - 0.5, minZ: set.bound?.minZ ?? box.min.z + 0.5, maxZ: set.bound?.maxZ ?? box.max.z - 0.5 });
+});
 window.app.propsReady = window.app.setReady.then(city => {
   if (!city || !set.props) return null;
   // Lamps are shared objects like the blocks: every laptop builds the same ones (same ids), the host's scenes keep them in step.
