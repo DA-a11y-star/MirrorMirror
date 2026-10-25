@@ -6,6 +6,8 @@ const MAX_BUFFERED = 1 << 20; // bytes; a state snapshot that would queue behind
 
 const finite = (a, n) => Array.isArray(a) && a.length === n && a.every(Number.isFinite);
 const pose = o => !!o && typeof o.id === 'string' && finite(o.pos, 3) && finite(o.quat, 4);
+// A block's size is optional on the wire (older senders omit it), but when present it must be three sane numbers.
+const sizeOk = o => o.scale == null || (finite(o.scale, 3) && o.scale.every(v => v >= .01 && v <= 50));
 
 export function validState(msg) {
   if (!msg || msg.type !== 'state' || typeof msg.user !== 'string' || !Number.isFinite(msg.seq)) return false;
@@ -19,14 +21,14 @@ export function validState(msg) {
     if (!Array.isArray(hand.lm) || hand.lm.length !== 21 || !hand.lm.every(p => finite(p, 3))) return false;
     if (hand.rest != null && typeof hand.rest !== 'boolean') return false;
   }
-  return Array.isArray(msg.held) && msg.held.length <= 16 && msg.held.every(pose);
+  return Array.isArray(msg.held) && msg.held.length <= 16 && msg.held.every(h => pose(h) && sizeOk(h));
 }
 
 const idList = list => list == null ||
   (Array.isArray(list) && list.length <= MAX_SCENE_LIST && list.every(id => typeof id === 'string'));
 
 // An assembly may arrive without its `spec` (pose only); peers that already know the object just move it.
-const sceneObject = o => pose(o) && (o.kind !== 'assembly' || (o.spec == null ? validAssemblyTransform(o) : validAssemblyObject(o)));
+const sceneObject = o => pose(o) && sizeOk(o) && (o.kind !== 'assembly' || (o.spec == null ? validAssemblyTransform(o) : validAssemblyObject(o)));
 
 export function validScene(msg) {
   return !!msg && msg.type === 'scene' && typeof msg.user === 'string' && Number.isFinite(msg.seq) &&

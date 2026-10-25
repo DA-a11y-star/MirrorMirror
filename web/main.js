@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { currentPreset, DEV_ORBIT, GAZE_SOURCE, GESTURE, HOST_ID, PARALLAX_STRENGTH, RELAY_URL, SET_ID, TRACKER_SOURCE, TRACKER_URL, USER_ID, VOICE_URL } from './config.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { RemoteAvatar } from './remote-avatar.js';
+import { headQuaternion, RemoteAvatar } from './remote-avatar.js';
+import { GAZE_LOOK, GazeLook } from './gaze-look.js';
 import { OffAxis } from './offaxis.js';
 import { Hands } from './hands.js';
 import { Net } from './net.js';
@@ -25,6 +26,7 @@ import { Dev } from './dev.js';
 import { Objects } from './objects.js';
 import { VoiceUI } from './voice-ui.js';
 import { DustCloud } from './dust.js';
+import { Dragon } from './dragon.js';
 import { Gestures } from './gestures.js';
 import { GestureUI } from './gesture-ui.js';
 
@@ -88,6 +90,9 @@ if (!set) throw new Error(`Unknown set "${SET_ID}"; known: ${Object.keys(SETS).j
 applyEnvironment(scene, look, set.environment);
 if (set.workspace) blocks.position.set(set.workspace[0], 0, set.workspace[1]);
 window.app.set = set;
+// Sets with a `dragon` setting get one circling overhead: decoration, never in `blocks`, placed from the wall clock so both laptops agree.
+const dragon = set.dragon ? new Dragon(scene, set.dragon) : null;
+window.app.dragon = dragon;
 window.app.look = look; // dev console: tweak lights and floor live
 // The landing page's preset becomes the world (unless ?set= asks for a model set explicitly).
 if (presetId && !explicitSet && !modelPreset) {
@@ -112,6 +117,8 @@ locomotion.floorAt = floorAt;
 avatar.floorAt = floorAt;
 const rig = new CameraRig(camera);
 const gestures = new Gestures(GESTURE);
+const gazeLook = new GazeLook(GAZE_LOOK); // the view turns toward where you look when your eyes rest near the screen edge
+const headQ = new THREE.Quaternion();
 // The mouse is the pinch and there are no palms to steer with, so start where pinch grabs (M still toggles).
 if (TRACKER_SOURCE === 'mouse') gestures.mode = 'EDIT';
 const gestureUI = new GestureUI(gestures);
@@ -245,6 +252,11 @@ renderer.setAnimationLoop(() => {
   }
   gestures.suppressVoice = interaction.grabs.size > 0;
   gestures.apply(intents);
+  // Eyes toward the edge turn the view, as if the head turned. Not while a block is held, and not for the pointer or mouse
+  // fallback, where the cursor over the panels at the screen edge would spin the view.
+  const eyeLook = gazeLook.update(gaze.source === 'pointer' ? null : gaze.get(now), dt, !gaze.calibrating && interaction.grabs.size === 0);
+  intents.look.dYaw += eyeLook.dYaw;
+  intents.look.dPitch += eyeLook.dPitch;
   if (intents.toggles.voice) voiceUI.wake();
   if (intents.toggles.dev) dev.toggle();
   if (intents.toggles.recenter) offAxis.recenter();
@@ -260,6 +272,7 @@ renderer.setAnimationLoop(() => {
     locomotion.update(intents, dt, !rig.freeActive && !intents.toggles.freeCam);
     const state = locomotion.state();
     avatar.setHands(tracker.frame?.hands?.map(h => ({ ...h, rest: gestures.restFor(h.side) }))); // the glove hands copy yours (visible in third person and to the other user)
+    avatar.setHeadTurn(tracker.frame?.head?.quat ? headQuaternion(tracker.frame.head.quat, headQ) : null); // your avatar's head follows your real head
     avatar.update(state, dt);
     rig.update(intents, state, avatar.bob, dt);
     avatar.setVisible(!rig.hideAvatar);
@@ -275,6 +288,7 @@ renderer.setAnimationLoop(() => {
   gazeUI.update(now, interaction.target?.userData.id, [...interaction.grabs.values()].map(g => g.mesh.userData.id).join(', '));
   gestureUI.update();
   world?.update(performance.now() / 1000);
+  dragon?.update();
   steerDust(dt);
   dust.update(dt);
   dev.update({

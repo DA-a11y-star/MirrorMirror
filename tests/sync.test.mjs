@@ -148,6 +148,31 @@ test('snapshots carry every block, and the scene goes out about every 100 ms fro
   assert.ok(a.sync.sceneSnapshot(1100));
   assert.equal(setup('B').sync.sceneSnapshot(1000), null);
 
-  assert.deepEqual(a.sync.snapshotHeld(new Set(['b2'])), [{ id: 'b2', pos: [1.2346, .2, 0], quat: IDENTITY }]);
+  assert.deepEqual(a.sync.snapshotHeld(new Set(['b2'])), [{ id: 'b2', pos: [1.2346, .2, 0], quat: IDENTITY, scale: [1, 1, 1] }]);
   assert.deepEqual(a.sync.snapshotHeld(new Set()), []);
+});
+
+test('a held block\'s size travels with it: the other laptop eases to it, and a sender without a size leaves it alone', () => {
+  const s = setup('A');
+  s.sync.applyState(held('B', { id: 'b1', pos: [0, .2, 0], quat: IDENTITY, scale: [2, 2, 2] }), s.clock.now, new Set());
+  s.run(1000 / 60);
+  assert.ok(s.blocks[0].scale.x > 1 && s.blocks[0].scale.x < 2, 'part of the way in one frame, not a jump');
+  s.run(500);
+  assert.ok(Math.abs(s.blocks[0].scale.x - 2) < .01 && Math.abs(s.blocks[0].scale.y - 2) < .01);
+  assert.deepEqual(s.blocks[1].scale.toArray(), [1, 1, 1], 'other blocks are untouched');
+  s.sync.applyState(held('B', 'b2'), s.clock.now, new Set()); // an older sender: pose only
+  s.run(500);
+  assert.deepEqual(s.blocks[1].scale.toArray(), [1, 1, 1]);
+});
+
+test('a resized block keeps its size after release (it settles on the last size), and the snapshot reports it', () => {
+  const s = setup('A');
+  s.sync.applyState(held('B', { id: 'b1', pos: [0, .2, 0], quat: IDENTITY, scale: [1.5, 1.5, 1.5] }), s.clock.now, new Set());
+  s.run(100);
+  s.sync.applyState(held('B'), s.clock.now, new Set());
+  s.run(1000);
+  assert.deepEqual(s.blocks[0].scale.toArray(), [1.5, 1.5, 1.5]);
+  assert.deepEqual(s.sync.sceneSnapshot(s.clock.now).objects[0].scale, [1.5, 1.5, 1.5], 'the host\'s scene carries the new size to late joiners');
+  s.blocks[0].scale.setScalar(2.25);
+  assert.deepEqual(s.sync.snapshotHeld(new Set(['b1']))[0].scale, [2.25, 2.25, 2.25], 'a holder streams its size');
 });

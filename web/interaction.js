@@ -17,6 +17,12 @@ const LEARN_DWELL = 250;    // the block must have been the supported target thi
 const FAST_SPEED = .5;
 const FAST_MEMORY = 300;
 const OPEN_GRACE = 500;
+// Two-hand scaling: while one hand holds a block, pinching with the other hand and spreading or closing the two
+// pinches scales the block uniformly by the ratio of the distances. The size stays within these limits of its original.
+const SCALE_MIN = .3;
+const SCALE_MAX = 4;
+const SCALE_MIN_START = .06;  // m, a start distance smaller than this would make the ratio jumpy, so it counts as this
+const SCALE_RATE = 20;        // 1/s, smoothing of the scale toward what the hands ask for
 
 // Gaze supplies only {x, y, conf}; interaction is independent of webcam vs hardware gaze providers.
 export class Interaction {
@@ -38,6 +44,8 @@ export class Interaction {
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
     this.pinch = new THREE.Vector3();
+    this.pinchB = new THREE.Vector3(); // scaling: the holding hand's pinch
+    this.pinchC = new THREE.Vector3(); // scaling: the other hand's pinch
     this.world = new THREE.Vector3();
     this.bounds = new THREE.Box3();
     this.corner = new THREE.Vector3();
@@ -209,6 +217,7 @@ export class Interaction {
           startedAt: now, fastAt: -Infinity, openSince: null, learnable: this.lostSince === null && now - this.targetSince >= LEARN_DWELL,
           rect: this.centralRect(this.target), learned: false });
       }
+      if (this.startScaling(hand, pinched, now)) continue;
       const grab = this.grabs.get(hand.side);
       if (!grab || hand.held) continue; // freeze exactly during a brief tracking hold
       // The grace keeps the grab alive across a flicker; it must not keep following an open hand.
@@ -223,6 +232,7 @@ export class Interaction {
         grab.learned = true;
         if (grab.learnable && grab.rect) this.onLearn?.({ rect: grab.rect, at: grab.startedAt, now, aspect: this.gazeCamera.aspect });
       }
+      this.scaleGrab(grab, pinched, now);
       this.world.copy(this.pinch).sub(grab.pinch).multiplyScalar(grab.gain).add(grab.start);
       // Simple floor constraint, not an object-to-object physics solver.
       this.bounds.setFromObject(grab.mesh);
@@ -232,6 +242,42 @@ export class Interaction {
     }
     this.wasPinched = pinched;
     this.highlight();
+  }
+
+  // A new pinch from the hand that is NOT holding, while the other hand holds a block that this pinch is not aimed away
+  // from (gaze on it or on nothing): the two hands now scale that block. Returns true when it started.
+  startScaling(hand, pinched, now) {
+    if (!hand.pinching || hand.held || this.wasPinched.has(hand.side) || this.grabs.has(hand.side)) return false;
+    const holder = [...this.grabs].find(([side, grab]) => side !== hand.side && !grab.scaling && grab.openSince === null);
+    if (!holder || (this.target && this.target !== holder[1].mesh)) return false;
+    const [holderSide, grab] = holder;
+    if (!pinched.has(holderSide) || !this.pinchPosition(holderSide, this.pinchB)) return false;
+    const d0 = Math.max(SCALE_MIN_START, this.pinch.distanceTo(this.pinchB));
+    const base = (grab.mesh.userData.baseScale ??= grab.mesh.scale.clone()); // its size when it first got scaled
+    grab.scaling = { side: hand.side, d0, from: grab.mesh.scale.clone(), base, factor: 1, startedAt: now };
+    return true;
+  }
+
+  // While the second hand keeps pinching, the block's size follows the spread of the two pinches.
+  scaleGrab(grab, pinched, now) {
+    const s = grab.scaling;
+    if (!s) return;
+    const slot = this.frame.hands.find(h => h.side === s.side);
+    if (!pinched.has(s.side)) {
+      if (slot && slot.held) return; // a brief tracking hold: keep the size, wait
+      grab.scaling = null; // the second hand let go: the size stays, the block is still held
+      return;
+    }
+    const holderSide = [...this.grabs].find(([, g]) => g === grab)?.[0];
+    if (!holderSide || !this.pinchPosition(holderSide, this.pinchB) || !this.pinchPosition(s.side, this.pinchC)) return;
+    const ratio = this.pinchB.distanceTo(this.pinchC) / s.d0;
+    const dt = Math.min(.1, (now - (s.at ?? now)) / 1000);
+    s.at = now;
+    // Total size stays within SCALE_MIN..SCALE_MAX of the block's original, whatever it has been scaled to since.
+    const orig = s.base.x;
+    const want = THREE.MathUtils.clamp(s.from.x * ratio, orig * SCALE_MIN, orig * SCALE_MAX) / s.from.x;
+    s.factor += (want - s.factor) * (1 - Math.exp(-SCALE_RATE * dt));
+    grab.mesh.scale.copy(s.from).multiplyScalar(s.factor);
   }
 
   // The middle half of a block's screen outline: where a user who is looking at the block is plausibly looking.
@@ -257,8 +303,8 @@ export class Interaction {
     if (this.target) {
       this.tint(this.target, 0xf4c95d, .35);
     }
-    for (const { mesh } of this.grabs.values()) {
-      this.tint(mesh, 0x5bbfbd, .5);
+    for (const { mesh, scaling } of this.grabs.values()) {
+      this.tint(mesh, scaling ? 0xf29a6b : 0x5bbfbd, .5); // orange while two hands are scaling it
     }
   }
 

@@ -11,6 +11,7 @@ const BELLY_R = 0.18;
 const WALK_SPEED_REF = 2; // m/s, speed at which the walk bob and lean reach their nominal size
 const BODY_TURN_RATE = 8; // 1/s, how fast the body yaw eases toward the movement direction
 const LEAN_RATE = 8;
+const HEAD_FOLLOW_RATE = 12; // 1/s: how quickly the head eases toward your real head's turn (the remote avatar uses the same ease)
 const MAX_LEAN = 0.2; // radians
 
 // The two ball hands follow where your real hands are (their position, not the fingers). Landmarks are webcam-space
@@ -59,6 +60,7 @@ function toon(mesh, thickness = 0.07) {
   return mesh;
 }
 
+const IDENTITY = new THREE.Quaternion();
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 const ease = (rate, dt) => 1 - Math.exp(-rate * dt);
 
@@ -135,6 +137,9 @@ export class Avatar {
 
     this.floorAt = () => 0; // (x, z) => floor height, set by the world
     this.bodyYaw = 0;
+    this.headRel = new THREE.Quaternion();   // the real head's turn relative to the view, eased
+    this._headGoal = new THREE.Quaternion(); // where headRel is heading (identity = looking straight along the view)
+    this._headEuler = new THREE.Euler();
     this.bob = 0; // vertical offset in meters, also read by the first-person camera
     this.leanForward = 0;
     this.leanSide = 0;
@@ -145,6 +150,14 @@ export class Avatar {
     this._f = new THREE.Vector3();
     this._r = new THREE.Vector3();
     this._hand = {};
+  }
+
+  // The tracker's head rotation, already mapped to the world (headQuaternion in remote-avatar.js), or null when there is
+  // none: the head then settles back to following the view. It adds to the view direction, so turning your head turns
+  // the avatar's head the same way, on your own avatar and (through the state message) on the other laptop.
+  setHeadTurn(quat) {
+    if (quat) this._headGoal.copy(quat).normalize();
+    else this._headGoal.identity();
   }
 
   setHeadVisible(visible) {
@@ -194,7 +207,12 @@ export class Avatar {
     this._blink(dt);
 
     this.root.position.set(state.pos[0], state.pos[1] + this.bob, state.pos[2]);
-    this.head.rotation.set(state.pitch, state.yaw, 0);
+    this.headRel.slerp(this._headGoal, ease(HEAD_FOLLOW_RATE, dt));
+    if (this.headRel.angleTo(IDENTITY) > 1e-4) {
+      this.head.quaternion.setFromEuler(this._headEuler.set(state.pitch, state.yaw, 0, 'YXZ')).multiply(this.headRel);
+    } else {
+      this.head.rotation.set(state.pitch, state.yaw, 0); // no head turn: exactly the view, as before
+    }
   }
 
   _placeShoes(state, amount) {

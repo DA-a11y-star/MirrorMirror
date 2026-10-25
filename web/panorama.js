@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { buildSetScene, EYE_HEIGHT } from './set-scene.js';
 import { random } from './set-layout.js';
 import { SETS } from './sets.js';
+import { Dragon } from './dragon.js';
 import { fitScenery, prepareScenery } from './scenery.js';
 
 // The landing page's background: a title-screen panorama. The viewer stands in the middle of a preset's scene while
@@ -82,6 +83,11 @@ export class Panorama {
       const built = buildSetScene(preset, random(this.seed + this.built.size * 7919));
       const model = this.modelRoots.get(preset.id);
       if (model) built.scene.add(model); // disposed with the scene
+      if (SETS[preset.id]?.dragon) { // a flier circles overhead; it follows the panorama's own clock, so reduced motion slows it too
+        const dragon = new Dragon(built.scene, SETS[preset.id].dragon);
+        const update = built.update;
+        built.update = t => { update(t); dragon.update(t); };
+      }
       this.built.set(preset.id, built);
     }
     return this.built.get(preset.id);

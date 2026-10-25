@@ -39,6 +39,27 @@ export const SETS = {
     },
     credit: '"KyleS-Japanese Garden" by ksayavanh2023 (https://sketchfab.com/ksayavanh2023), CC BY 4.0',
   },
+  'chinese-city': {
+    name: 'Chinese City',
+    model: 'assets/chinese-city/low_poly_chinese_city.glb',
+    // A walled town of about 35 x 33 m with gates on four sides, a main avenue (along z, the axis the two spawns use) and
+    // a cross street. At 1x the streets are only 2.7 m wide, too tight for the starter blocks (1.7 m) and two users, so it
+    // is built at 2x: streets 5.4 m, buildings about 9 m. `center` puts the middle of the crossroads (20.5, 28 in the
+    // model) on the origin, and `floor` is the paving's height in the model (0.01), so the street sits 2 cm above the room
+    // floor instead of fighting it.
+    scale: 2,
+    center: [0, 9],
+    floor: 0,
+    shadows: { castShadow: true },
+    // A dragon circles above the town (dragon.js): its lowest flight clears the tallest roof (9.2 m) by a few metres.
+    dragon: { center: [0, 0], radius: [22, 34], height: [13, 19], speed: 8 },
+    // Warm afternoon. The model's ground plane was removed, so the room floor shows through the courtyards: packed earth.
+    environment: {
+      background: 0xb9d6ec, fog: [0xe9e2d4, 45, 130], hemisphere: [0xfff3df, 0x8c7c62, 1.3],
+      sun: [0xfff0d6, 1.7], floor: 0xa89a80, grid: false,
+    },
+    credit: '"Low poly Chinese city" by smooth998 (https://sketchfab.com/smooth998), CC BY 4.0',
+  },
 };
 
 // Loads the set's model with the given GLTFLoader, adds it to `scene` as non-interactive scenery and resolves with

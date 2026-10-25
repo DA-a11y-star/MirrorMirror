@@ -79,8 +79,8 @@
 }
 .landing-main { flex: 1; width: min(1080px, 100%); margin: 0 auto; padding: clamp(10px, 3vh, 26px) 28px 120px; box-sizing: border-box; }
 #preset-grid {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); gap: 22px 32px;
-  max-width: 1080px; margin: 0 auto; /* four mirrors fit on one row on a laptop */
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); gap: 22px 24px;
+  max-width: 1240px; margin: 0 auto; /* six mirrors fit on one row on a laptop */
 }
 /* Each set is an oval silver mirror, the "mirror, mirror on the wall" kind: a polished silver frame with a beaded
    rim and scrollwork crest, aged glass showing the set's scene, and an engraved silver plaque with its name. The

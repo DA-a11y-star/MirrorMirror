@@ -18,3 +18,8 @@ face_landmarker.download
 .env
 .env.*
 !.env.example
+
+# Raw model downloads dropped in the repo root: process them into web/assets/ instead of committing them here.
+/*.glb
+/*.obj
+/*.mtl

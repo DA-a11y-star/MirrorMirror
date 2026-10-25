@@ -61,6 +61,18 @@ test('the Japanese garden is placed on its lawn, at real size, with its measured
   assert.deepEqual(preset.objects, {}, 'the world comes from the model, not from invented props');
 });
 
+test('the Chinese city is built at 2x so its 2.7 m streets fit the blocks and both users, with its crossroads on the origin', async () => {
+  const city = SETS['chinese-city'];
+  assert.equal(city.scale, 2, 'at 1x the streets are narrower than the starter blocks plus two users');
+  assert.deepEqual(city.center, [0, 9], 'the crossroads is 4.5 model metres short of the model centre in z, so 9 m at 2x');
+  assert.equal(city.floor, 0);
+  const preset = JSON.parse(await readFile(new URL('../web/presets/chinese-city/preset.json', import.meta.url), 'utf8'));
+  assert.equal(preset.id, 'chinese-city', 'the landing card and the model set share an id');
+  assert.deepEqual(preset.objects, {});
+  const ignore = await readFile(new URL('../.gitignore', import.meta.url), 'utf8');
+  assert.ok(ignore.includes('/*.glb'), 'raw model downloads in the repo root must not be committable');
+});
+
 test('prepareScenery marks and freezes the model; it receives shadows but casts none unless asked', () => {
   const root = model();
   fitScenery(root, { scale: 2, center: [0, 0] });

@@ -372,3 +372,102 @@ test('blocks other users look at or hold glow violet, below the local highlights
   s.step([], null, true, 400); // the local target outlives a blink by the grace period, then everything clears
   assert.equal(s.block.material.emissive.getHex(), base);
 });
+
+// ---- two-hand scaling ----
+// The right hand grabs the block, then the left hand pinches (new pinch) and moves away or toward it.
+function holdThenScale(s, leftStart = -.1) {
+  s.look();
+  s.step([hand(false, 0, 'right')]);
+  s.step([hand(true, 0, 'right')]);
+  assert.equal(s.interaction.grabs.size, 1);
+  s.step([hand(true, 0, 'right'), hand(false, leftStart, 'left')]);
+  s.step([hand(true, 0, 'right'), hand(true, leftStart, 'left')]);
+}
+const settle = (s, leftX, frames = 12) => { for (let i = 0; i < frames; i++) s.step([hand(true, 0, 'right'), hand(true, leftX, 'left')]); };
+
+test('scaling: a second pinch while one hand holds starts it, and spreading the hands grows the block uniformly', () => {
+  const s = setup();
+  holdThenScale(s);
+  const grab = [...s.interaction.grabs.values()][0];
+  assert.ok(grab.scaling, 'the second hand\'s pinch put the grab into scale mode');
+  assert.equal(s.interaction.grabs.size, 1, 'still one grab: the second hand does not own the block');
+  settle(s, -.3);
+  const grown = s.block.scale.clone();
+  assert.ok(grown.x > 1.5, `spreading made it bigger (${grown.x})`);
+  assert.ok(Math.abs(grown.x - grown.y) < 1e-9 && Math.abs(grown.y - grown.z) < 1e-9, 'uniformly');
+  settle(s, -.05, 20);
+  assert.ok(s.block.scale.x < grown.x, 'closing the hands shrinks it again');
+});
+
+test('scaling: the size is limited to a fraction and a few multiples of the original, however far the hands go', () => {
+  const s = setup();
+  holdThenScale(s);
+  settle(s, -3, 30);
+  assert.ok(s.block.scale.x <= 4 + 1e-6 && s.block.scale.x > 3.5, `capped at 4x (${s.block.scale.x})`);
+  settle(s, -.0001, 40);
+  assert.ok(s.block.scale.x >= .3 - 1e-6 && s.block.scale.x < .35, `floored at 0.3x (${s.block.scale.x})`);
+});
+
+test('scaling: letting go with the second hand keeps the size and the block stays held; a new second pinch carries on from there', () => {
+  const s = setup();
+  holdThenScale(s);
+  settle(s, -.3);
+  const size = s.block.scale.x;
+  s.step([hand(true, 0, 'right'), hand(false, -.3, 'left')]);
+  assert.equal([...s.interaction.grabs.values()][0].scaling, null, 'scale mode ended');
+  assert.equal(s.interaction.grabs.size, 1, 'the first hand still holds the block');
+  s.step([hand(true, .05, 'right'), hand(false, -.3, 'left')]);
+  assert.equal(s.block.scale.x, size, 'the size stays');
+  assert.ok(s.block.position.x > 0, 'and the holding hand still moves the block');
+  const hold = x => s.step([hand(true, .05, 'right'), hand(true, x, 'left')]);
+  hold(-.15);
+  for (let i = 0; i < 12; i++) hold(-.15);
+  assert.ok(Math.abs(s.block.scale.x - size) < .05, `a new pinch starts from the current size, not the original (${s.block.scale.x} vs ${size})`);
+});
+
+test('scaling: a second pinch aimed at a different block grabs that one instead of scaling', () => {
+  const s = setup([-1.2, 1.2]);
+  const [left, right] = s.blocks;
+  const rectOf = mesh => s.interaction.screenRect(mesh);
+  s.look(point(center(rectOf(left))));
+  s.step([hand(false, 0, 'right')], point(center(rectOf(left))));
+  s.step([hand(true, 0, 'right')], point(center(rectOf(left))));
+  assert.equal(s.interaction.grabs.get('right').mesh, left);
+  for (let i = 0; i < 6; i++) s.step([hand(true, 0, 'right')], point(center(rectOf(right)))); // look at the other block while holding
+  s.step([hand(true, 0, 'right'), hand(false, -.2, 'left')], point(center(rectOf(right))));
+  s.step([hand(true, 0, 'right'), hand(true, -.2, 'left')], point(center(rectOf(right))));
+  assert.equal(s.interaction.grabs.size, 2, 'each hand holds its own block');
+  assert.equal(s.interaction.grabs.get('left').mesh, right);
+  assert.equal(left.scale.x, 1);
+  assert.equal(right.scale.x, 1);
+});
+
+test('scaling: both hands pinching at the same moment (a double pinch) grab with one and scale with the other', () => {
+  const s = setup();
+  s.look();
+  s.step([hand(false, 0, 'right'), hand(false, -.1, 'left')]);
+  s.step([hand(true, 0, 'right'), hand(true, -.1, 'left')]);
+  assert.equal(s.interaction.grabs.size, 1, 'one hand owns the block');
+  assert.ok([...s.interaction.grabs.values()][0].scaling, 'and the other is already scaling it');
+  settle(s, -.3);
+  assert.ok(s.block.scale.x > 1.5, `spreading grows it (${s.block.scale.x})`);
+});
+
+test('scaling: hands that were already pinching before the block was targeted never scale anything', () => {
+  const s = setup();
+  s.step([hand(true, 0, 'right'), hand(true, -.1, 'left')]); // no gaze target yet: both pinches are consumed
+  settle(s, -.1, 4); // the gaze settles on the block while both stay pinched: they were not new pinches
+  settle(s, -.5, 8);
+  assert.equal(s.block.scale.x, 1);
+  assert.equal(s.interaction.grabs.size, 0);
+});
+
+test('scaling: while scaling, the block is highlighted differently, and releasing everything clears it', () => {
+  const s = setup();
+  holdThenScale(s);
+  const scaling = s.block.material.emissive.getHex();
+  s.step([hand(true, 0, 'right'), hand(false, -.1, 'left')]);
+  assert.notEqual(s.block.material.emissive.getHex(), scaling, 'the scaling tint ends with scaling');
+  s.step([hand(false, 0, 'right'), hand(false, -.1, 'left')], FAR, true, 800);
+  assert.equal(s.interaction.grabs.size, 0);
+});

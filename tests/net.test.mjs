@@ -137,3 +137,13 @@ test('a hand may carry `rest` (MOVE mode, stick not engaged): a boolean or nothi
   for (const ok of [undefined, true, false, null]) assert.equal(validState(withRest(ok)), true, String(ok));
   for (const bad of ['yes', 1, [], {}]) assert.equal(validState(withRest(bad)), false, JSON.stringify(bad));
 });
+
+test('a held block or scene object may carry a size: three sane numbers, or nothing', () => {
+  const held = scale => state('B', 1, { held: [{ id: 'b1', pos: [0, .5, 0], quat: [0, 0, 0, 1], ...(scale === undefined ? {} : { scale }) }] });
+  for (const ok of [undefined, null, [1, 1, 1], [2.5, 2.5, 2.5], [0.3, 0.3, 0.3]]) assert.equal(validState(held(ok)), true, JSON.stringify(ok));
+  for (const bad of [[1, 1], [NaN, 1, 1], ['2', 1, 1], [0, 0, 0], [-1, 1, 1], [1e6, 1, 1], 2]) assert.equal(validState(held(bad)), false, JSON.stringify(bad));
+  const objectWith = scale => ({ ...scene(), objects: [{ id: 'b1', pos: [0, 0, 0], quat: [0, 0, 0, 1], scale }] });
+  assert.equal(validScene(objectWith([1, 1, 1])), true);
+  assert.equal(validScene(objectWith([1, NaN, 1])), false);
+  assert.equal(validScene(objectWith([-1, 1, 1])), false);
+});
