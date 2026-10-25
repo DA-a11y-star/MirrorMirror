@@ -13,7 +13,7 @@ import { GAZE_LOOK } from './gaze-look.js';
 const HELP = `
   <p><b>Gestures.</b> MOVE: right palm = move (forward/back, left/right, up/down). Left palm = look (up/down, left/right). One fist recenters that stick. Double-fist then both open switches to EDIT. In EDIT, pinch a block with both hands and spread them to resize it. Hold one fist to talk: “mirror mirror, make a …”.</p>
   <p><b>No camera?</b> Open with <code>?tracker=mouse</code>: the cursor is your gaze and hand, hold the left button to pinch, right-click to mouse-look.</p>
-  <p><b>Keys.</b> ↑↓ forward · ←→ turn · A/D strafe · Space/Shift up/down · M mode · V view · C free cam · P depth · R respawn · \` dev · L library · F copy looked-at · Del delete looked-at. Click the scene to mouse-look (Esc releases).</p>`;
+   <p><b>Keys.</b> ↑↓ forward · ←→ turn · A/D strafe · Space/Shift up/down · M mode · V view · C free cam · P depth · R respawn · \` dev · J presentation · L library · F copy looked-at · Del delete looked-at. Click the scene to mouse-look (Esc releases).</p>`;
 const KEY = 'gestureSettings2'; // v2: defaults already include the tuned sensitivity, so old saved multipliers must not stack
 const MIN_SPAN = 0.05; // FULL stays at least this far above DEAD so the axis can still reach full speed
 

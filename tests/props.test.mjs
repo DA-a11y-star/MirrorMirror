@@ -16,11 +16,12 @@ const roads = await load('roads');
 const protocol = await load('object-protocol');
 const objects = await load('objects', { 'object-protocol': protocol.url });
 const sync = await load('sync', { 'object-protocol': protocol.url });
-const props = (await load('props', { scenery: scenery.url, roads: roads.url, 'set-layout': layout.url })).module;
+const ambience = await load('ambience', { roads: roads.url, 'set-layout': layout.url });
+const props = (await load('props', { scenery: scenery.url, roads: roads.url, ambience: ambience.url, 'set-layout': layout.url })).module;
 const { buildClearance, groundLevels, mergeByLook } = scenery.module;
 const { roadField, roadSkeleton, paintRoads, sampleField, connectRoads, findJunctions, ROAD_COLORS } = roads.module;
 const { random } = layout.module;
-const { planRoadCars, planAirCars, planLamps, lampSpec, airshipAt, buildWallE, carParts, Cars, JunctionLights, isCarBody, CAR_COLORS, SURFACE } = props;
+const { separatePatrols, planRoadCars, planAirCars, planLamps, lampSpec, airshipAt, buildWallE, carParts, Cars, JunctionLights, isCarBody, CAR_COLORS, SURFACE } = props;
 
 const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, ...extra });
 const box = (w, h, d, x, y, z, material = mat(0x888888)) => {
@@ -413,4 +414,88 @@ test('JunctionLights: three instanced meshes for any number of junctions, one li
   assert.ok(Math.abs(p.setFromMatrixPosition(at).y - (SURFACE + 7.5)) <= 0.151, 'bobbing stays small');
   assert.ok(lights.meshes.every(m => m.boundingSphere), 'bounds for culling');
   assert.equal(new JunctionLights([]).meshes[0].count, 0, 'no junctions, no lights');
+});
+
+test('cars patrol: planned runs stay on asphalt or in clear air, and Cars drives them back and forth, turning at the ends', () => {
+  const road = planRoadCars({ skeleton: w.skeleton, field: w.field, rand: random(5), car: CAR });
+  const moving = road.filter(c => c.speed > 0);
+  assert.ok(moving.length >= 4, `${moving.length} of ${road.length} road cars drive`);
+  for (const car of moving) {
+    assert.ok(car.range[0] <= 0 && car.range[1] >= 0 && car.range[1] - car.range[0] >= 6);
+    assert.ok(car.speed >= 2.5 && car.speed <= 5);
+    for (const end of car.range) {
+      const x = car.x + Math.cos(car.yaw) * end, z = car.z - Math.sin(car.yaw) * end;
+      assert.ok(sampleField(w.field, w.field.road, x, z) >= CAR.width / 2 - 0.2, `the end of its run at ${end.toFixed(1)} m is still road`);
+    }
+  }
+  const air = planAirCars({ clearance: w.clearance, rand: random(7), car: CAR, spacing: 12, max: 14, altitudes: [4, 9, 15, 24], bounds: { minX: -38, maxX: 38, minZ: -24, maxZ: 24 } });
+  assert.ok(air.some(c => c.speed > 0));
+  for (const car of air.filter(c => c.speed > 0)) {
+    assert.ok(car.speed >= 5 && car.speed <= 9);
+    for (const end of car.range) {
+      const x = car.x + Math.cos(car.yaw) * end, z = car.z - Math.sin(car.yaw) * end;
+      assert.ok(w.clearance.clear(x, z, CAR.radius - 0.5, car.y - 0.4, car.y + CAR.height + 0.4), 'clear air at the end of its run');
+    }
+  }
+
+  const root3 = new THREE.Group();
+  root3.add(box(300, 60, 160, 0, 80, 0, mat(new THREE.Color(0.5, 0.02, 0.05))), box(100, 50, 150, 0, 130, 0, mat(0x111111)));
+  const parts = carParts(root3, 3.8);
+  const plan = [
+    { x: 0, y: 0, z: 0, yaw: 0, air: false, color: 0xff0000, range: [-3, 5], speed: 4 },
+    { x: 0, y: 0, z: 4, yaw: Math.PI / 2, air: false, color: 0x00ff00, range: [0, 0], speed: 0 },
+  ];
+  const cars = new Cars(parts, plan, { chunk: 50 });
+  const [driver, parked] = cars.chunks[0].entries;
+  const mesh = cars.meshes[parts.parts.findIndex(p => p.key === 'body')];
+  const at = new THREE.Matrix4(), p = new THREE.Vector3();
+  let lowest = Infinity, highest = -Infinity, turns = 0, lastDir = 1, seconds = 0;
+  for (let step = 0; step < 400; step++) {
+    seconds += 0.05;
+    cars.update(seconds);
+    lowest = Math.min(lowest, driver.s); highest = Math.max(highest, driver.s);
+    if (driver.dir !== lastDir) { turns++; lastDir = driver.dir; }
+    assert.ok(driver.s >= -3 - 1e-9 && driver.s <= 5 + 1e-9, `stays in its run: ${driver.s}`);
+  }
+  assert.ok(highest > 4.99 && lowest < -2.99, `it drives the whole run: ${lowest.toFixed(2)} to ${highest.toFixed(2)}`);
+  assert.ok(turns >= 3, `and turns round at each end (${turns} turns in 20 s)`);
+  const fresh = new Cars(parts, [{ ...plan[0] }], { chunk: 50 });
+  fresh.update(0);
+  for (let step = 1; step <= 20; step++) fresh.update(step * 0.05);
+  assert.ok(Math.abs(fresh.chunks[0].entries[0].s - 4) < 1e-6, `one second at 4 m/s covers 4 m: ${fresh.chunks[0].entries[0].s}`);
+  mesh.getMatrixAt(0, at);
+  p.setFromMatrixPosition(at);
+  assert.ok(Math.abs(p.x - driver.s) < 1e-6 && Math.abs(p.z) < 1e-6, 'the instance follows it along its heading');
+  assert.equal(parked.s, 0, 'a parked car does not move');
+  mesh.getMatrixAt(1, at);
+  assert.deepEqual(p.setFromMatrixPosition(at).toArray().map(v => +v.toFixed(3)), [0, 0, 4]);
+  assert.ok(cars.chunks[0].reach === 5 && mesh.boundingSphere.radius >= 5 + 2, 'the square\'s bounds cover the patrol');
+  const before = driver.s;
+  cars.update(seconds + 5); // a stalled tab: the cars take one capped step, they do not jump
+  assert.ok(Math.abs(driver.s - before) <= 4 * 0.1 + 1e-9, 'a long gap moves a car at most 0.1 s of driving');
+});
+
+test('separatePatrols trims runs so cars in a lane never meet, and leaves other lanes and heights alone', () => {
+  const dims = { length: 3.8, width: 2.1 };
+  const car = (x, z, extra = {}) => ({ x, y: 0.02, z, yaw: 0, air: false, color: 0xff0000, range: [-8, 8], speed: 3, ...extra });
+  const meet = (plan, a, b) => { // the closest two cars could ever get along the shared lane
+    let closest = Infinity;
+    for (let sa = plan[a].range[0]; sa <= plan[a].range[1] + 1e-9; sa += 0.25) for (let sb = plan[b].range[0]; sb <= plan[b].range[1] + 1e-9; sb += 0.25) {
+      closest = Math.min(closest, Math.hypot(plan[a].x + sa - plan[b].x - sb, plan[a].z - plan[b].z));
+    }
+    return closest;
+  };
+  const same = separatePatrols([car(0, 0), car(10, 0)], dims);
+  assert.ok(meet(same, 0, 1) >= dims.length + 1 - 1e-6, `same lane: ${meet(same, 0, 1).toFixed(2)} m apart at the closest`);
+  assert.ok(same[1].range[1] - same[1].range[0] <= 16, 'the second car\'s run was shortened');
+  const crowded = separatePatrols([car(0, 0), car(5.4, 0)], dims);
+  assert.equal(crowded[1].speed, 0, 'no room to patrol: it parks');
+  assert.deepEqual(crowded[1].range, [0, 0]);
+  const lanes = separatePatrols([car(0, 0), car(10, 3.2, { yaw: Math.PI })], dims); // the other lane, going the other way
+  assert.deepEqual(lanes[1].range, [-8, 8], 'opposite lanes never meet, so nothing is trimmed');
+  const high = separatePatrols([car(0, 0), car(10, 0, { y: 9, air: true })], dims);
+  assert.deepEqual(high[1].range, [-8, 8], 'a hovering car above is not in the way');
+  const parked = separatePatrols([car(8, 0, { speed: 0, range: [0, 0] }), car(0, 0)], dims);
+  assert.ok(parked[1].range[1] < 8, 'a parked car in the way trims the run');
+  assert.deepEqual(separatePatrols([car(0, 0), car(10, 0)], dims), same, 'deterministic');
 });

@@ -119,6 +119,7 @@ export class Dragon {
       return material;
     };
     const bodyMaterial = flat(0xffffff); // tinted per segment through instance colors
+    bodyMaterial.emissive.set(0x43140a); bodyMaterial.emissiveIntensity = 0.3; // warm separation against the twilight sky
     const gold = flat(0xe8b923);
     gold.emissive.set(0x5a4208);
     const bone = flat(0xf3ead2);

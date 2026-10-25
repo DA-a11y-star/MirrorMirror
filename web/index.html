@@ -74,6 +74,9 @@
     .library-status { min-height: 1.4em; color: #617087; font-size: 12px; }
     .library-empty { grid-column: 1 / -1; color: #617087; text-align: center; }
     [hidden] { display: none !important; }
+    #presentation-toggle { position: fixed; right: 116px; top: 10px; z-index: 4; font: 12px system-ui, sans-serif; color: #f5f1e8; background: rgba(16,22,37,.78); border-color: #ffffff30; }
+    body.presentation #hud, body.presentation #tools, body.presentation #voice-tools,
+    body.presentation #joysticks, body.presentation #library-toggle, body.presentation #library { display: none !important; }
   </style>
   <link rel="stylesheet" href="./landing.css">
   <script type="importmap">
@@ -111,6 +114,7 @@
   </div>
   <!-- The workspace UI stays hidden (and main.js unloaded) until Play. -->
   <div id="workspace-ui" hidden>
+    <button id="presentation-toggle" type="button" aria-pressed="false" title="Hide panels for the demo; gestures and voice still work (J)">Presentation · J</button>
     <div id="hud"></div>
     <div id="tools">
       <label for="gaze-source">Gaze</label>

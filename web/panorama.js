@@ -5,6 +5,10 @@ import { random } from './set-layout.js';
 import { SETS } from './sets.js';
 import { Dragon } from './dragon.js';
 import { fitScenery, prepareScenery } from './scenery.js';
+import { applyEnvironment, createScene } from './scene.js';
+import { buildSetAtmosphere } from './set-atmosphere.js';
+import { loadSetProps } from './props.js';
+import { worldSeed } from './world.js';
 
 // The landing page's background: a title-screen panorama. The viewer stands in the middle of a preset's scene while
 // the camera turns slowly all the way around, with a gentle bob and a little parallax from the pointer. Showing
@@ -80,13 +84,45 @@ export class Panorama {
 
   sceneFor(preset) {
     if (!this.built.has(preset.id)) {
-      const built = buildSetScene(preset, random(this.seed + this.built.size * 7919));
       const model = this.modelRoots.get(preset.id);
-      if (model) built.scene.add(model); // disposed with the scene
+      const definition = SETS[preset.id];
+      let built;
+      if (model && definition.environment?.sky) {
+        // Model sets use the exact workspace look and extras, not the old primitive stand-in plus different lights.
+        const { scene, look, blocks } = createScene();
+        blocks.traverse(n => { n.geometry?.dispose(); n.material?.dispose(); }); blocks.removeFromParent();
+        applyEnvironment(scene, look, definition.environment);
+        const [x, z] = definition.workspace ?? [0, 0];
+        look.sun.position.x += x; look.sun.position.z += z;
+        look.sun.target.position.set(x, 0, z); scene.add(look.sun.target);
+        scene.add(model);
+        const atmosphere = buildSetAtmosphere(scene, definition);
+        let props = null, alive = true;
+        built = {
+          scene, position: [x, EYE_HEIGHT, z], readyDone: false,
+          update(t, camera) { atmosphere.update(t, camera); props?.update(0.016, t, camera); },
+          dispose() {
+            alive = false; props?.dispose(); atmosphere.dispose();
+            const geometries = new Set(), materials = new Set();
+            scene.traverse(n => { if (n.geometry) geometries.add(n.geometry); if (n.material) materials.add(n.material); });
+            geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose());
+          },
+        };
+        built.ready = loadSetProps(definition, { scene, city: model, loader: this.loader, reducedMotion: this.reducedMotion, rand: random(worldSeed(definition.name)) })
+          .then(loaded => { if (alive) props = loaded; else loaded?.dispose(); })
+          .catch(error => console.warn(`[panorama] extras: ${error.message}`))
+          .then(() => { built.readyDone = true; });
+      } else {
+        built = buildSetScene(preset, random(this.seed + this.built.size * 7919));
+        if (model) built.scene.add(model);
+        built.readyDone = true;
+      }
       if (SETS[preset.id]?.dragon) { // a flier circles overhead; it follows the panorama's own clock, so reduced motion slows it too
         const dragon = new Dragon(built.scene, SETS[preset.id].dragon);
         const update = built.update;
-        built.update = t => { update(t); dragon.update(t); };
+        const dispose = built.dispose;
+        built.update = (t, camera) => { update(t, camera); dragon.update(t); };
+        built.dispose = () => { dragon.dispose(); dispose(); };
       }
       this.built.set(preset.id, built);
     }
@@ -103,6 +139,10 @@ export class Panorama {
       return;
     }
     const set = this.sceneFor(preset);
+    if (!set.readyDone) {
+      set.ready.then(() => { if (this.wanted === preset) this.show(preset); });
+      return;
+    }
     const current = this.layers[this.top];
     if (current.set === set) return;
     if (!current.set) {
@@ -136,9 +176,10 @@ export class Panorama {
     const shots = new Map();
     for (const preset of presets) {
       const set = this.sceneFor(preset);
-      camera.position.set(0, EYE_HEIGHT, 0);
+      await set.ready;
+      camera.position.fromArray(set.position ?? [0, EYE_HEIGHT, 0]);
       camera.rotation.set(preset.view.pitch * DEG, preset.view.yaw * DEG, 0, 'YXZ');
-      set.update(0);
+      set.update(10, camera);
       renderer.render(set.scene, camera);
       shots.set(preset.id, canvas.toDataURL('image/jpeg', .86));
     }
@@ -199,9 +240,10 @@ export class Panorama {
     this.layers.forEach((layer, i) => {
       if (!layer.set || (i !== this.top && !fading)) return;
       const t = this.time;
-      this.camera.position.set(0, EYE_HEIGHT + (this.reducedMotion ? 0 : Math.sin(t * .45) * .04), 0);
+      this.camera.position.fromArray(layer.set.position ?? [0, EYE_HEIGHT, 0]);
+      this.camera.position.y += this.reducedMotion ? 0 : Math.sin(t * .45) * .04;
       this.camera.rotation.set(layer.view.pitch * DEG - p.y * .035, layer.view.yaw * DEG - t * SPIN - p.x * .07, 0, 'YXZ');
-      layer.set.update(t);
+      layer.set.update(t, this.camera);
       layer.renderer.render(layer.set.scene, this.camera);
     });
   }

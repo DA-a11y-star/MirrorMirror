@@ -146,7 +146,8 @@ async def main():
         seen_b = await a.js("app.peers.get('B').body.root.position.toArray()")   # feet
         seen_a = await b.js("app.peers.get('A').body.root.position.toArray()")
         eye_b = await a.js("app.peers.get('B').seat.position.toArray()")
-        assert abs(seen_b[2] - cam_b[2]) < .3 and abs(seen_a[2] - cam_a[2]) < .3 and seen_b[1] < .1 and 1.3 < eye_b[1] < 1.6, (seen_b, cam_b, seen_a, cam_a, eye_b)
+        floor_b = await a.js("app.world?.floorAt(...[app.peers.get('B').body.root.position.x, app.peers.get('B').body.root.position.z]) ?? 0")
+        assert abs(seen_b[2] - cam_b[2]) < .3 and abs(seen_a[2] - cam_a[2]) < .3 and abs(seen_b[1] - floor_b) < .1 and 1.3 < eye_b[1] - seen_b[1] < 1.6, (seen_b, cam_b, seen_a, cam_a, eye_b, floor_b)
         face_b = await a.js("(() => { const v = new app.camera.position.constructor(0, 0, -1).applyQuaternion(app.peers.get('B').body.head.quaternion); return v.z; })()")
         assert face_b > .3, f'B faces away from A: {face_b}'
         await a.wait("app.peers.get('B').hands.joints.count === 42", what="B's hands appear on A")

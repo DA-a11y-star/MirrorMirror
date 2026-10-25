@@ -19,6 +19,7 @@ const KEY_TOGGLES = {
   KeyP: 'depthFx',
   KeyR: 'reset',
   KeyH: 'recenter',
+  KeyJ: 'presentation', // clear the view for judges without disabling gestures or calibration
   KeyL: 'library',     // open/close the object library
   KeyF: 'duplicate',   // copy the object you are looking at
   Delete: 'remove',    // delete the object you are looking at
@@ -37,7 +38,7 @@ export function emptyIntents() {
     look: { dYaw: 0, dPitch: 0 },
     zoom: 0,
     toggles: { mode: false, voice: false, view: false, freeCam: false, dev: false, depthFx: false, reset: false, recenter: false,
-      library: false, duplicate: false, remove: false },
+      library: false, duplicate: false, remove: false, presentation: false },
   };
 }
 
