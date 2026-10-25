@@ -12,8 +12,8 @@ export const TRACKER_URL = 'ws://localhost:8766';
 export const VOICE_URL = 'ws://localhost:8767';
 // 'websocket' = local Python tracker; 'mock' = animated hands for camera-free development.
 export const TRACKER_SOURCE = params.get('tracker') ?? 'websocket';
-// 'webcam' = calibrated iris features; 'external' = tracker-provided screen gaze; 'pointer' = explicit dev fallback.
-export const GAZE_SOURCE = 'webcam';
+// 'glasses' = Innomaker eye + forward camera; 'external' = tracker-provided coordinates.
+export const GAZE_SOURCE = params.get('gaze') ?? 'webcam';
 
 // Physical size of this laptop's screen, for the depth effect (14" MacBook Pro ~ 0.302 x 0.196 m).
 export const SCREEN_WIDTH_M = 0.302;

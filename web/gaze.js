@@ -18,6 +18,26 @@ const LEARN_WINDOW_MS = [550, 150];
 export const median = values => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
+// Row-major homography between normalized forward-camera and active-screen coordinates.
+export function projectPoint(matrix, point) {
+  if (!Array.isArray(matrix) || matrix.length !== 9 || !matrix.every(Number.isFinite)) return null;
+  const [x, y] = point;
+  const z = matrix[6] * x + matrix[7] * y + matrix[8];
+  if (Math.abs(z) < 1e-9) return null;
+  const result = [(matrix[0] * x + matrix[1] * y + matrix[2]) / z,
+    (matrix[3] * x + matrix[4] * y + matrix[5]) / z];
+  return result.every(Number.isFinite) ? result : null;
+}
+
+export function invertHomography(m) {
+  if (!Array.isArray(m) || m.length !== 9 || !m.every(Number.isFinite)) return null;
+  const [a, b, c, d, e, f, g, h, i] = m;
+  const result = [e*i-f*h, c*h-b*i, b*f-c*e, f*g-d*i, a*i-c*g, c*d-a*f,
+    d*h-e*g, b*g-a*h, a*e-b*d];
+  const determinant = a * result[0] + b * result[3] + c * result[6];
+  return Math.abs(determinant) < 1e-10 ? null : result.map(v => v / determinant);
+}
+
 function solve(matrix, values) {
   const rows = matrix.map((row, i) => [...row, values[i]]);
   for (let i = 0; i < rows.length; i++) {
@@ -124,10 +144,11 @@ export class GazeInput {
   }
 
   setSource(source) {
-    if (!['webcam', 'external', 'pointer'].includes(source)) throw new Error(`Unknown gaze source: ${source}`);
+    if (!['webcam', 'glasses', 'external', 'pointer'].includes(source)) throw new Error(`Unknown gaze source: ${source}`);
+    if (this.source !== source) this.calibration.clear();
     this.source = source;
     this.reset();
-    this.status = source === 'webcam' ? 'calibrate webcam gaze' : `waiting for ${source} gaze`;
+    this.status = ['webcam', 'glasses'].includes(source) ? `calibrate ${source} gaze` : `waiting for ${source} gaze`;
   }
 
   reset() {
@@ -135,6 +156,27 @@ export class GazeInput {
     this.lastTimestamp = null;
     this.lastReceived = -Infinity;
     this.history = [];
+    this.head = null;
+  }
+
+  calibrationTarget(target, raw = this.raw) {
+    if (this.source !== 'glasses') return [...target];
+    const inverse = invertHomography(raw?.screen);
+    return inverse ? projectPoint(inverse, target) : null;
+  }
+
+  setScreenLayout(id) {
+    if (this.screenLayout === id) return;
+    this.screenLayout = id;
+    this.calibration.clear();
+    this.reset();
+  }
+
+  predictRaw(raw = this.raw) {
+    if (!raw) return null;
+    if (this.source === 'external') return [raw.x, raw.y];
+    const point = this.calibration.predict(raw.features);
+    return point && this.source === 'glasses' ? projectPoint(raw.screen, point) : point;
   }
 
   // A confirmed grab on a block: refine the webcam calibration from the iris features that chose it.
@@ -151,7 +193,13 @@ export class GazeInput {
 
   ingest(frame, now) {
     if (this.source === 'pointer') return;
+    this.head = frame.head ? structuredClone(frame.head) : null;
     const gaze = frame.gaze;
+    if (this.source === 'glasses' && this.screenLayout && gaze?.screen_layout !== this.screenLayout) {
+      this.raw = this.output = null;
+      this.status = 'waiting for browser screen-marker layout';
+      return;
+    }
     const t = gaze?.t ?? frame.t;
     if (!gaze || !Number.isFinite(gaze.conf) || gaze.conf < MIN_CONFIDENCE || !Number.isFinite(t)) {
       this.raw = this.output = null;
@@ -164,16 +212,17 @@ export class GazeInput {
     this.lastReceived = now;
     this.raw = gaze;
     let point;
-    if (this.source === 'webcam') {
-      if (gaze.source !== 'webcam' || !Array.isArray(gaze.features) || gaze.features.length !== FEATURE_COUNT || !gaze.features.every(Number.isFinite)) {
+    if (this.source === 'webcam' || this.source === 'glasses') {
+      if (gaze.source !== this.source || !Array.isArray(gaze.features) || gaze.features.length !== FEATURE_COUNT || !gaze.features.every(Number.isFinite) ||
+          (this.source === 'glasses' && !invertHomography(gaze.screen))) {
         this.raw = this.output = null;
-        this.status = 'webcam iris data unavailable';
+        this.status = `${this.source} eye/screen data unavailable`;
         return;
       }
       this.history.push({ at: now, features: gaze.features });
       while (now - this.history[0].at > HISTORY_MS) this.history.shift();
-      point = this.calibration.predict(gaze.features);
-      this.status = point ? 'webcam gaze calibrated' : 'calibrate webcam gaze';
+      point = this.predictRaw(gaze);
+      this.status = point ? `${this.source} gaze calibrated${this.source === 'glasses' ? ` · camera skew ${gaze.sync_ms ?? '?'} ms` : ''}` : `calibrate ${this.source} gaze`;
     } else {
       point = [gaze.x, gaze.y];
       this.status = 'external tracker gaze';

@@ -19,6 +19,7 @@ import { CameraRig } from './camera.js';
 import { Dev } from './dev.js';
 import { Objects } from './objects.js';
 import { VoiceUI } from './voice-ui.js';
+import { ScreenMarkers } from './screen-markers.js';
 
 const STATE_HZ = 30; // how often this laptop sends its state to the other
 
@@ -31,13 +32,23 @@ const offAxis = new OffAxis(camera, PARALLAX_STRENGTH);
 const view = offAxis.view;
 const gaze = new GazeInput(TRACKER_SOURCE === 'mock' ? 'pointer' : GAZE_SOURCE);
 const interaction = new Interaction(blocks, camera, hands, view, { onLearn: sample => gaze.learn(sample) });
-const gazeUI = new GazeUI(gaze, () => interaction.releaseAll());
+let stopTracker;
+const screenMarkers = new ScreenMarkers(layout => {
+  gaze.setScreenLayout(layout?.id ?? null);
+  interaction.releaseAll();
+  stopTracker?.sendScreenLayout?.();
+});
+const gazeUI = new GazeUI(gaze, () => {
+  interaction.releaseAll();
+  screenMarkers.setEnabled(gaze.source === 'glasses');
+});
+screenMarkers.setEnabled(gaze.source === 'glasses');
 const objects = new Objects(blocks, interaction);
 const sync = new SceneSync(blocks, { userId: USER_ID, hostId: HOST_ID, objects });
 const peers = new Map(); // user id -> RemoteAvatar
 const heldIds = () => new Set([...interaction.grabs.values()].map(grab => grab.mesh.userData.id));
 const voiceUI = new VoiceUI(VOICE_URL, objects);
-window.app = { renderer, scene, camera, view, hands, blocks, interaction, gaze, gazeUI, offAxis, sync, peers, objects, voiceUI }; // dev console
+window.app = { renderer, scene, camera, view, hands, blocks, interaction, gaze, gazeUI, screenMarkers, offAxis, sync, peers, objects, voiceUI }; // dev console
 
 // Avatar, camera rig and input. Keys and mouse are read only in input.js; everything below consumes intents.
 const input = new Input(renderer.domElement);
@@ -69,11 +80,14 @@ function onTrackerMessage(msg) {
     gaze.ingest(msg, performance.now());
     gazeUI.observe(performance.now());
     tracker.frames++;
+  } else if (msg.type === 'gaze') {
+    gaze.ingest(msg, performance.now());
+    gazeUI.observe(performance.now());
+    offAxis.setHead(msg.head, performance.now());
   } else if (msg.type === 'gesture') {
     tracker.lastGesture = `${msg.hand} ${msg.name}`;
   }
 }
-let stopTracker;
 if (TRACKER_SOURCE === 'mock') {
   tracker.status = 'mock';
   stopTracker = startMockTracker(onTrackerMessage);
@@ -84,7 +98,7 @@ if (TRACKER_SOURCE === 'mock') {
       gaze.reset();
       interaction.releaseAll();
     }
-  });
+  }, { getScreenLayout: () => screenMarkers.layout });
 } else {
   throw new Error(`Unknown TRACKER_SOURCE: ${TRACKER_SOURCE}`);
 }

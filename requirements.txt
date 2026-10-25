@@ -1,8 +1,10 @@
 mediapipe>=0.10.30
-opencv-python
+opencv-contrib-python>=4.8
 numpy
 pynput
 websockets>=15,<16
 certifi
 aiohttp>=3.10,<4
 jsonschema>=4.23,<5
+pyobjc-framework-AVFoundation; sys_platform == "darwin"
+pyobjc-framework-libdispatch; sys_platform == "darwin"

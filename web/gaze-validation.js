@@ -20,7 +20,9 @@ export function recordGaze(input, target, now) {
     features: [...input.raw.features], confidence: input.raw.conf,
     head: input.head ? structuredClone(input.head) : null,
     // Score the unclamped prediction: clipping to the viewport would hide large errors.
-    prediction: input.calibration.predict(input.raw.features),
+    screen: input.raw.screen ? [...input.raw.screen] : null,
+    screenLayout: input.raw.screen_layout ?? null,
+    prediction: input.predictRaw(),
     filtered: input.output ? [input.output.x, input.output.y] : null,
   };
 }

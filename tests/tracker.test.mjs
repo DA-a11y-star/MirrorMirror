@@ -84,3 +84,54 @@ test('malformed messages do not refresh the watchdog', t => {
   s.tick(600);
   assert.deepEqual(s.messages.at(-1).hands, []);
 });
+
+test('independent gaze is deduplicated without keeping stale hands alive', t => {
+  const s = setup(t), socket = s.sockets[0];
+  const gaze = stamp => ({ type: 'gaze', t: stamp, gaze: { t: stamp, source: 'glasses', conf: .9 } });
+  socket.open();
+  socket.send(gaze(100)); // gaze can arrive before any hand frame
+  socket.send(gaze(100));
+  socket.send(gaze(99));
+  socket.send({ ...gaze(101), gaze: { t: 101, conf: 2 } });
+  assert.equal(s.messages.filter(m => m.type === 'gaze').length, 1);
+  socket.send(frame(1));
+  s.tick(300);
+  socket.send(gaze(102));
+  s.tick(300);
+  assert.equal(s.statuses.at(-1), 'stalled; hands cleared');
+  assert.deepEqual(s.messages.at(-1).hands, []);
+  assert.equal(s.messages.filter(m => m.type === 'gesture' && m.name === 'pinch_end').length, 1);
+  socket.close();
+  s.tick(1000);
+  const second = s.sockets[1];
+  second.open(); second.send(gaze(1));
+  assert.equal(s.messages.at(-1).t, 1, 'gaze clock resets on reconnect');
+});
+
+test('browser marker geometry is sent on connection, resize and reconnect', t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  const sockets = [], sent = [];
+  class Socket {
+    constructor() { sockets.push(this); this.readyState = 0; }
+    send(data) { sent.push(JSON.parse(data)); }
+    open() { this.readyState = 1; this.onopen(); }
+    close() { this.readyState = 3; this.onclose?.(); }
+  }
+  let layout = { id: 'first', version: 1 };
+  const stop = startTracker('ws://localhost:8766', () => {}, () => {}, {
+    WebSocketClass: Socket, getScreenLayout: () => layout,
+  });
+  t.after(stop);
+  sockets[0].open();
+  assert.deepEqual(sent.at(-1), { type: 'screen_layout', layout });
+  layout = { id: 'resized', version: 1 };
+  stop.sendScreenLayout();
+  assert.equal(sent.at(-1).layout.id, 'resized');
+  sockets[0].close();
+  t.mock.timers.tick(1000);
+  sockets[1].open();
+  assert.equal(sent.at(-1).layout.id, 'resized');
+  layout = null;
+  stop.sendScreenLayout();
+  assert.equal(sent.at(-1).layout, null, 'leaving glasses mode releases the browser layout');
+});

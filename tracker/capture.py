@@ -28,12 +28,15 @@ class LatestValue:
 
 
 class CameraCapture:
-    def __init__(self, index=0):
+    def __init__(self, index=0, *, role="webcam", size=CAPTURE_SIZE, fps=30, rotation=0):
         self.index = index
+        self.role, self.size, self.fps, self.rotation = role, size, fps, rotation
+        self.started_at = None
+        self.count = 0
         self.frames = LatestValue()
         self.stop_event = threading.Event()
         self.error = None
-        self.thread = threading.Thread(target=self._run, name="camera-capture", daemon=True)
+        self.thread = threading.Thread(target=self._run, name=f"capture-{role}", daemon=True)
 
     def start(self):
         self.thread.start()
@@ -52,20 +55,28 @@ class CameraCapture:
                     break
                 cap.release()
                 if time.monotonic() >= deadline:
-                    raise RuntimeError("Cannot open webcam. Check camera permissions and close other camera apps.")
+                    raise RuntimeError(f"Cannot open {self.role} camera {self.index}. Check permissions and close other camera apps.")
                 self.stop_event.wait(1)
             if self.stop_event.is_set():
                 return
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAPTURE_SIZE[0])
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAPTURE_SIZE[1])
-            cap.set(cv2.CAP_PROP_FPS, 30)
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.size[0])
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.size[1])
+            cap.set(cv2.CAP_PROP_FPS, self.fps)
             cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-            print("Camera open; streaming hands to the local browser.", flush=True)
+            print(f"[{self.role}] camera {self.index}: {int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))}x"
+                  f"{int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))} @ {cap.get(cv2.CAP_PROP_FPS):.0f} fps", flush=True)
+            self.started_at = time.monotonic()
             while not self.stop_event.is_set():
                 ok, frame = cap.read()
                 if not ok:
-                    raise RuntimeError("Webcam stopped returning frames. Restart the tracker to reconnect.")
-                self.frames.put((time.monotonic(), frame))
+                    raise RuntimeError(f"{self.role} camera stopped returning frames. Restart the tracker to reconnect.")
+                observed_at = time.monotonic()  # arrival time, not hardware exposure time
+                if self.rotation:
+                    frame = cv2.rotate(frame, {90: cv2.ROTATE_90_CLOCKWISE,
+                                              180: cv2.ROTATE_180,
+                                              270: cv2.ROTATE_90_COUNTERCLOCKWISE}[self.rotation])
+                self.count += 1
+                self.frames.put((observed_at, frame))
         except Exception as exc:
             self.error = exc
         finally:

@@ -40,6 +40,9 @@ tracker/
   gestures.py          Shared pinch/fist classification and pinch transition events
   filters.py           Shared One Euro filter
   gaze.py              Replaceable gaze providers (webcam iris features) and the gaze worker thread
+  camera_setup.py      Preview/assign identical Innomaker cameras by persistent macOS device ID
+  mac_capture.py       Native AVFoundation capture by device ID, with independent latest-frame slots
+  glasses.py           Pupil/iris discrimination, browser-marker mapping, bounded observation alignment
 web/
   index.html           Page shell; maps "three" to the vendored copy; gaze controls
   config.js            Per-laptop settings (user ID, URLs, screen size, tracker and gaze source)
@@ -87,7 +90,7 @@ Current MediaPipe releases (1.1.1 is installed here) no longer include the legac
 
 On macOS, grant the app you run from (Cursor, Terminal, iTerm) permissions in System Settings > Privacy & Security, then fully quit and reopen it:
 - **Camera**, or the webcam won't open.
-- **Accessibility** is needed only for the standalone prototype's OS mouse control. The browser tracker doesn't import `pynput`, open a preview window or control your mouse.
+- **Accessibility** is needed only for the standalone prototype's OS mouse control. The browser tracker doesn't import `pynput` or control your mouse. Camera setup and the optional `--preview` flag open diagnostic windows.
 
 ## Running the web app
 
@@ -142,6 +145,84 @@ Gaze sources (the dropdown, or `GAZE_SOURCE` in `config.js`):
 - **Pointer (development).** The mouse acts as gaze. This is also what `TRACKER_SOURCE = 'mock'` uses.
 
 Run the tracker with `--gaze none` to skip the face model and run only the accepted hand tracker.
+
+### Innomaker glasses: two USB cameras + laptop webcam
+
+The `hardware_support` implementation is a **marker-assisted 2D gaze prototype**. The eye camera tracks the pupil; the forward camera locates the screen; the FaceTime webcam continues hands and head tracking. Real-eye accuracy is not yet measured. Full metric 3D eye-ray calibration, lens-distortion calibration and compensation for changing viewing distance remain future work; see [`HARDWARE_EYE_TRACKING.md`](HARDWARE_EYE_TRACKING.md).
+
+Both connected cameras identify as **Innomaker-U20CAM-1080p-S1**. Their names are identical and device-list indexes can change. On macOS, saved assignments open devices directly by unique ID through AVFoundation, avoiding OpenCV's different index ordering. Moving USB ports may change an ID; rerun assignment if a device is missing.
+
+#### 1. Install dependencies and assign the feeds
+
+```bash
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m tracker.camera_setup
+```
+
+Wear the glasses and adjust the eye camera until a sharp, close-up eye fills its view. Adjust the forward camera until it sees the whole display.
+
+In the preview window:
+
+- Press **1**, **2**, or **3** to select a feed; the selected tile has a yellow border.
+- Press **E** to label that feed as the eye camera, **S** as the forward scene camera, or **W** as the laptop webcam. Cover one lens briefly if the two USB feeds look similar.
+- Press **R** to rotate the selected feed by 90 degrees. Set orientation before calibration.
+- With the eye feed selected and assigned, press **I**, drag a crop around the eye, then press **Enter**. Exclude eyebrows, glasses frames, and other dark circular objects while leaving room for eye movement.
+- Press **Enter** in the main preview to save all three distinct assignments. **Esc** cancels.
+
+Settings are saved locally in ignored `.camera-config.json`. Reassigning cameras, changing the crop/orientation, or repositioning the mount requires recalibration.
+
+For connection diagnostics without the assignment window, stop the tracker first:
+
+```bash
+.venv/bin/python -m tracker.camera_setup --list
+.venv/bin/python -m tracker.camera_setup --probe
+```
+
+The eight-second probe opens both Innomakers and the FaceTime camera, then reports frame counts, image dimensions, freshness and errors. It excludes advertised phone cameras. These connected Innomakers expose 30 fps modes; requesting a higher rate does not make them 60 fps devices.
+
+#### 2. Use the browser's screen markers
+
+Selecting **Innomaker glasses** (or opening `/?gaze=glasses`) displays four large black-and-white markers in the browser corners. Their size and position adapt to the viewport. The patterns are bundled locally and stay visible over the calibration overlay and during normal interaction.
+
+The browser sends all 16 black-square corners in normalized viewport coordinates over the local tracker WebSocket. Python detects ArUco IDs **10, 11, 12, 13** (top-left, top-right, bottom-right, bottom-left) and fits the image-to-viewport homography using those actual positions. Marker centers are not assumed to be screen corners. Resize/reconnect messages update the geometry, and layout IDs reject old observations.
+
+Bring the marker page to the foreground. Aim the forward camera so the **whole page and all four markers** are visible, preferably centered and reasonably large in the camera image. Click **Fullscreen** for a larger, easier-to-detect reference; windowed mode also works. Keep Python preview windows and other applications from covering the markers. Printed markers are no longer needed.
+
+#### 3. Run, calibrate and validate
+
+```bash
+# Terminal 1
+.venv/bin/python -m tracker.main --gaze glasses --preview
+
+# Terminal 2
+.venv/bin/python -m http.server 8000 --directory web
+```
+
+Open **http://localhost:8000/?gaze=glasses** (or select **Innomaker glasses** in the Gaze dropdown).
+
+1. Check the eye preview for a green ellipse around the pupil. The forward preview outlines detected markers. If detection picks the wrong dark region, refine the eye crop and focus.
+2. Choose your final window size or click **Fullscreen**, then click **Calibrate gaze**. Follow the nine dots with your eyes while keeping your head comfortably still.
+3. Click **Validate accuracy** for five different, held-out targets. The UI reports mean and p90 error in CSS pixels. Validation never trains the model.
+4. Click **Export gaze data** to save calibration/validation observations, unclipped predictions, head snapshots and screen mappings for offline comparison.
+5. Test small head turns, blinks and marker occlusion, then compare validation results against **Webcam eyes**. Press **P** to turn the depth effect off when measuring gaze without moving-scene confounders.
+
+Exiting fullscreen or resizing invalidates calibration. Recalibrate after repositioning glasses or either camera. **Esc** in a Python preview stops the tracker; **Ctrl+C** also stops it.
+
+Capture and inference run independently. A bounded history matches each eye observation to a nearby screen observation (maximum 75 ms arrival-time skew and 150 ms age); missing markers, stale references and rejected pupils disable gaze. Independent `gaze` WebSocket messages never refresh hand timestamps or keep stale pinches alive. This is software arrival-time alignment, not hardware exposure synchronization.
+
+The pupil detector compares multiple thresholds and rejects a larger iris fit when a substantially darker nested pupil ellipse is present. Keep enough room in the saved eye crop for natural movement; a clipped pupil or very dark image is rejected. A cyan rectangle in the eye preview shows the crop.
+
+For live diagnostic snapshots without opening a second capture session, use `--snapshot-dir` with an existing local directory. This writes `eye-live.jpg` and `scene-live.jpg` overlays once per second. For example on macOS:
+
+```bash
+.venv/bin/python -m tracker.main --gaze glasses --snapshot-dir "$TMPDIR"
+```
+
+Inspect a saved eye image offline with `python -m tracker.glasses --inspect IMAGE --eye-roi X Y WIDTH HEIGHT --overlay OUTPUT`; add `--candidates` to inspect ellipse scores. Run camera assignment/probes with the tracker stopped so the services do not compete for device configuration.
+
+For explicit OpenCV index overrides instead of saved native-ID assignments, use `--camera N --eye-camera N --scene-camera N`; all three must differ. An optional `--eye-roi X Y WIDTH HEIGHT` overrides the crop in normalized, oriented image coordinates.
+
+**Verification:** simultaneous native-ID capture from both Innomakers and FaceTime, plus real three-camera tracker-to-WebSocket hand/gaze delivery. A mounted eye was inspected live; iris/pupil confusion and crop clipping were reproduced and corrected, but calibrated gaze accuracy remains unmeasured. Node/Python tests cover pupil geometry, nested-iris rejection, perspective mapping, layout validation/ownership, freshness and calibration/validation. `python tests/browser_markers_smoke.py` runs actual headless Chrome plus OpenCV and checks all four rendered markers through the calibration overlay at 1280×800, 1920×1080/DPR 2 and 800×1200, including viewport mapping and resize revisions. It needs Chrome/Chromium (`--chrome PATH` overrides discovery); `--artifacts EXISTING_DIRECTORY` saves screenshots. See `CLAUDE.md` for current suite counts. Mounted-eye screen calibration and head-motion performance still need a live user run.
 
 The browser reconnects automatically after tracker restarts. A brief detection gap holds the last hand pose for 0.35 seconds. If the feed itself stops, the browser clears hands and releases active pinches after 0.5 seconds without a valid new frame; a socket disconnect clears immediately.
 

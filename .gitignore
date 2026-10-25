@@ -18,3 +18,7 @@ face_landmarker.download
 .env
 .env.*
 !.env.example
+
+# Per-laptop camera identities and orientation
+.camera-config.json
+/web/glasses-markers.html

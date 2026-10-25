@@ -15,15 +15,20 @@ export function validFrame(msg) {
   return true;
 }
 
-export function startTracker(url, onMessage, onStatus, { WebSocketClass = WebSocket, now = () => performance.now() } = {}) {
+export function startTracker(url, onMessage, onStatus, { WebSocketClass = WebSocket, now = () => performance.now(),
+  getScreenLayout = () => null } = {}) {
   let socket;
   let retry;
   let stopped = false;
   let lastReceived = now();
   let lastTimestamp = -Infinity;
+  let lastGazeTimestamp = -Infinity;
   let hasFrame = false;
   let stale = false;
   const pinched = new Set();
+  function sendScreenLayout() {
+    if (socket?.readyState === 1) socket.send(JSON.stringify({ type: 'screen_layout', layout: getScreenLayout() }));
+  }
 
   function gesture(side, active) {
     if (pinched.has(side) === active) return;
@@ -44,9 +49,11 @@ export function startTracker(url, onMessage, onStatus, { WebSocketClass = WebSoc
     socket = new WebSocketClass(url);
     socket.onopen = () => {
       lastTimestamp = -Infinity; // tracker process may have restarted
+      lastGazeTimestamp = -Infinity;
       lastReceived = now();
       stale = false;
       onStatus('waiting for camera');
+      sendScreenLayout();
     };
     socket.onmessage = event => {
       let msg;
@@ -61,6 +68,12 @@ export function startTracker(url, onMessage, onStatus, { WebSocketClass = WebSoc
         onMessage(msg);
         // Full snapshots restore state after reconnect or a skipped frame. Explicit wire events are deduplicated.
         for (const side of ['left', 'right']) gesture(side, msg.hands.some(h => h.side === side && h.pinching));
+      } else if (msg?.type === 'gaze') {
+        if (!Number.isFinite(msg.t) || msg.t <= lastGazeTimestamp || !msg.gaze ||
+            !Number.isFinite(msg.gaze.conf) || msg.gaze.conf < 0 || msg.gaze.conf > 1 ||
+            !Number.isFinite(msg.gaze.t) || msg.gaze.t !== msg.t) return;
+        lastGazeTimestamp = msg.t;
+        onMessage(msg);
       } else if (msg?.type === 'gesture' && hasFrame && !stale && ['left', 'right'].includes(msg.hand)) {
         if (msg.name === 'pinch_start' || msg.name === 'pinch_end') gesture(msg.hand, msg.name === 'pinch_start');
       }
@@ -83,7 +96,7 @@ export function startTracker(url, onMessage, onStatus, { WebSocketClass = WebSoc
     }
   }, 100);
   connect();
-  return () => {
+  const stop = () => {
     stopped = true;
     clearTimeout(retry);
     clearInterval(watchdog);
@@ -91,4 +104,6 @@ export function startTracker(url, onMessage, onStatus, { WebSocketClass = WebSoc
     socket.onopen = socket.onmessage = socket.onerror = socket.onclose = null;
     socket.close();
   };
+  stop.sendScreenLayout = sendScreenLayout;
+  return stop;
 }

@@ -30,6 +30,14 @@
       background: rgba(255,255,255,.4); box-shadow: 0 0 0 3px rgba(255,255,255,.65);
     }
     #gaze-reticle.on-target { border-color: #9c6712; background: rgba(244,201,93,.6); }
+    #screen-markers { position: fixed; inset: 0; z-index: 20; pointer-events: none; }
+    .screen-marker { position: absolute; box-sizing: content-box; background: white; }
+    .screen-marker svg { display: block; width: 100%; height: 100%; }
+    .glasses-markers #tools, .glasses-markers #hud { left: calc(var(--marker-extent) + 12px); max-width: calc(100vw - 2 * var(--marker-extent) - 48px); }
+    .glasses-markers #voice-tools { left: calc(var(--marker-extent) + 18px); max-width: calc(100vw - 2 * var(--marker-extent) - 64px); }
+    .glasses-markers #calibration-copy { width: calc(100vw - 2 * var(--marker-extent) - 30px); }
+    .glasses-markers #calibration-hint { left: calc(var(--marker-extent) + 20px); width: calc(100vw - 2 * var(--marker-extent) - 220px); }
+    .glasses-markers #cancel-calibration { right: calc(var(--marker-extent) + 18px); }
     #calibration { position: fixed; inset: 0; z-index: 5; background: #eef2f8; font: 16px/1.5 system-ui, sans-serif; color: #24334a; }
     #calibration-copy { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); text-align: center; width: min(660px, 90%); }
     #calibration-copy p { margin: 3px 0; }
@@ -61,10 +69,15 @@
     <label for="gaze-source">Gaze</label>
     <select id="gaze-source">
       <option value="webcam">Webcam eyes</option>
+      <option value="glasses">Innomaker glasses</option>
       <option value="external">External eye tracker</option>
       <option value="pointer">Pointer (development)</option>
     </select>
     <button id="calibrate">Calibrate gaze</button>
+    <button id="fullscreen-gaze">Fullscreen</button>
+    <button id="validate-gaze" disabled>Validate accuracy</button>
+    <button id="export-gaze">Export gaze data</button>
+    <div id="gaze-result" role="status"></div>
     <div id="gaze-status" role="status">Starting gaze input…</div>
     <div class="hint">Look at a block → pinch to grab → move your hand → release to place.</div>
     <div class="hint">Move: ↑↓ walk · ←→ turn · A/D strafe · F fly (Space/Shift up/down) · V view · C free cam · P depth · R respawn · ` dev. Click the scene to mouse-look (Esc releases).</div>
@@ -83,7 +96,7 @@
   </section>
   <div id="calibration" hidden>
     <div id="calibration-copy">
-      <strong>Webcam gaze calibration</strong>
+      <strong>Gaze calibration / accuracy check</strong>
       <p id="calibration-instruction">Look at the dot</p>
     </div>
     <div id="calibration-hint">Keep your head comfortably still and follow the dot with your eyes. Each point captures automatically.</div>
