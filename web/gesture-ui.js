@@ -26,17 +26,24 @@ export class GestureUI {
     this._injectStyle();
     this.settings = new GestureSettings(gestures.cfg);
     this.lastMode = gestures.mode;
+    // Looked up once: this runs every frame, and only writes when a value actually changes (writes dirty layout).
+    const q = sel => this.root.querySelector(sel);
+    this.els = { badge: q('#mode-badge'), label: q('#mode-label'), cue: q('#toggle-cue'), flash: q('#mode-flash'), sticks: {} };
+    this.shown = { mode: null, engaged: null, armed: null };
   }
 
   update() {
     const g = this.gestures;
-    const accent = ACCENT[g.mode] ?? ACCENT.MOVE;
-    document.documentElement.style.setProperty('--mode-accent', accent);
-    const badge = this.root.querySelector('#mode-badge');
-    this.root.querySelector('#mode-label').textContent = g.mode;
-    badge.dataset.mode = g.mode;
-    badge.classList.toggle('engaged', g.joy.engaged);
-    this.root.querySelector('#toggle-cue').hidden = g.toggle.state !== 'ARMED';
+    const { badge, label, cue } = this.els;
+    if (g.mode !== this.shown.mode) {
+      this.shown.mode = g.mode;
+      document.documentElement.style.setProperty('--mode-accent', ACCENT[g.mode] ?? ACCENT.MOVE);
+      label.textContent = g.mode;
+      badge.dataset.mode = g.mode;
+    }
+    if (g.joy.engaged !== this.shown.engaged) badge.classList.toggle('engaged', this.shown.engaged = g.joy.engaged);
+    const armed = g.toggle.state === 'ARMED';
+    if (armed !== this.shown.armed) cue.hidden = !(this.shown.armed = armed);
 
     // Left widget: look (x = yaw, y = pitch). Right widget: move (x = strafe, y = forward, dot size = up/down).
     this._paint('stick-look', g.look.engaged, g.look.curved.lateral, g.look.curved.vertical);
@@ -50,16 +57,22 @@ export class GestureUI {
   }
 
   _paint(id, on, x, y, z = 0) {
-    const el = this.root.querySelector(`#${id}`);
-    el.classList.toggle('on', !!on);
-    el.classList.toggle('off', !on);
+    const stick = this.els.sticks[id] ??= { el: this.root.querySelector(`#${id}`), on: null, transform: '' };
+    stick.dot ??= stick.el.querySelector('.joy-dot');
+    if (!!on !== stick.on) {
+      stick.on = !!on;
+      stick.el.classList.toggle('on', stick.on);
+      stick.el.classList.toggle('off', !stick.on);
+    }
     const dx = clamp(x || 0, -1, 1);
     const dy = clamp(y || 0, -1, 1);
-    el.querySelector('.joy-dot').style.transform = `translate(${dx * 18}px, ${-dy * 18}px) scale(${1 + clamp(z, -1, 1) * 0.6})`; // dot size = height (bigger = up)
+    // Quantised to 0.1 px / 0.01 scale so a still hand writes nothing. Dot size = height (bigger = up).
+    const transform = `translate(${(dx * 18).toFixed(1)}px, ${(-dy * 18).toFixed(1)}px) scale(${(1 + clamp(z, -1, 1) * 0.6).toFixed(2)})`;
+    if (transform !== stick.transform) stick.dot.style.transform = stick.transform = transform;
   }
 
   _flash(mode) {
-    const el = this.root.querySelector('#mode-flash');
+    const el = this.els.flash;
     el.textContent = mode;
     el.hidden = false;
     el.dataset.mode = mode;

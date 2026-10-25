@@ -61,3 +61,41 @@ test('Objects.nextSpot skips occupied spots', () => {
   const next = objects.nextSpot();
   assert.ok(Math.hypot(next.x - first.x, next.z - first.z) > 0.4, 'moves off an occupied centre');
 });
+
+test('dust cloud: cubes are pulled in from the air toward the core, then dive in on burst and vanish', () => {
+  const dust = new DustCloud(new THREE.Scene());
+  const core = new THREE.Vector3(2, 1, -3);
+  assert.equal(dust.cubes.visible, false);
+  dust.start(core);
+  assert.equal(dust.cubes.visible, true);
+  run(dust, 2);
+  const e = dust.cubes.instanceMatrix.array;
+  let outside = 0;
+  for (let i = 0; i < dust.cubes.count; i++) {
+    const o = i * 16;
+    const size = Math.hypot(e[o], e[o + 1], e[o + 2]); // column length = scale (decompose is degenerate at size 0)
+    const [x, y, z] = [e[o + 12], e[o + 13], e[o + 14]];
+    assert.ok([x, y, z, size].every(Number.isFinite));
+    assert.ok(y >= 0.05 - 1e-9, 'never below the floor');
+    assert.ok(size <= 0.105 + 1e-9, `cubes stay small: ${size}`);
+    if (Math.hypot(x - core.x, y - core.y, z - core.z) > 0.3) outside++;
+  }
+  assert.ok(outside > 10, `most cubes are still out in the air (${outside})`);
+  const before = dust.cubeData.map(c => c.u);
+  run(dust, 0.2);
+  assert.ok(dust.cubeData.some((c, i) => c.u > before[i] || c.u < 0.05), 'cubes keep moving inward (or respawn at the edge)');
+  dust.burst(new THREE.Vector3(0, 0.2, 0), 0.5);
+  assert.equal(dust.rush, true);
+  run(dust, 0.6);
+  assert.equal(dust.cubes.visible, false, 'every cube has dived in and gone');
+});
+
+test('dust cloud: stopping fades the cubes away too', () => {
+  const dust = new DustCloud(new THREE.Scene());
+  dust.start(new THREE.Vector3(0, 1, -2));
+  run(dust, 0.5);
+  dust.stop();
+  run(dust, 1);
+  assert.equal(dust.cubes.visible, false);
+  assert.equal(dust.state, 'idle');
+});

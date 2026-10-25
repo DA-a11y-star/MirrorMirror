@@ -59,6 +59,11 @@ export class VoiceUI {
     this.voice.startRecording(true);
   }
 
+  // The user switched modes: drop the recording or the pending build and stop the loading animation.
+  cancel() {
+    if (this.voice.cancel()) this.onBuild?.('stop');
+  }
+
   _beep(freq) {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -98,6 +103,7 @@ export class VoiceUI {
     }
     if (msg.type === 'transcript') this.input.value = msg.text;
     if (msg.type === 'error') { this.status.textContent = msg.message; this.onBuild?.('stop'); }
+    if (msg.type === 'cancelled') this.status.textContent = 'Build cancelled.';
     if (msg.type === 'nospeech') this.status.textContent = 'Didn\'t hear anything. Make a fist again and say “mirror mirror, make a …”.';
     if (msg.type === 'undo') { this.onBuild?.('stop'); this.undoObject(); }
     if (msg.type === 'object') {

@@ -189,6 +189,7 @@ const clock = new THREE.Clock();
 let frameMs = 0;
 let fpsShown = 0;
 let lastSent = 0;
+let lastMode = gestures.mode;
 
 renderer.setAnimationLoop(() => {
   const now = performance.now();
@@ -199,6 +200,10 @@ renderer.setAnimationLoop(() => {
   gestures.setFrame(tracker.frame?.hands ?? [], now);
   const intents = gaze.calibrating ? emptyIntents() : input.poll();
   if (intents.toggles.mode) gestures.toggleMode();
+  if (gestures.mode !== lastMode) { // switching modes (gesture or M) cancels a recording or pending build
+    lastMode = gestures.mode;
+    voiceUI.cancel();
+  }
   gestures.suppressVoice = interaction.grabs.size > 0;
   gestures.apply(intents);
   if (intents.toggles.voice) voiceUI.wake();

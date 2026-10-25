@@ -73,8 +73,13 @@ export class Voice {
       this.connected = this.configured = this.busy = false;
       this.cancelRecording();
       if (!this.closed) {
-        this.emit('offline');
-        this.retry = setTimeout(() => this.connect(), 2000);
+        if (this.resetting) { // cancel(): reconnect straight away, and say nothing
+          this.resetting = false;
+          this.retry = setTimeout(() => this.connect(), 100);
+        } else {
+          this.emit('offline');
+          this.retry = setTimeout(() => this.connect(), 2000);
+        }
       }
     };
   }
@@ -167,6 +172,23 @@ export class Voice {
     } finally {
       if (captureId === this.captureId) this.starting = false;
     }
+  }
+
+  // Abandon whatever is in progress: a recording, or a request still waiting on the model. The connection is dropped and
+  // re-made for the latter so the late answer can never turn up as the next request's object. True if there was work.
+  cancel() {
+    if (!(this.busy || this.recording || this.starting)) return false;
+    this.cancelRecording();
+    if (this.busy) {
+      clearTimeout(this.requestTimer);
+      this.resetting = true;
+      this.socket.onmessage = null;
+      this.socket.close();
+    }
+    this.busy = false;
+    this.emit('status', { stage: 'idle' });
+    this.emit('cancelled');
+    return true;
   }
 
   stopRecording() {
