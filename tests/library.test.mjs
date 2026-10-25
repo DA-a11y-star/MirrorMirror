@@ -205,10 +205,10 @@ test('a library add goes through Objects.add (so it syncs) and a duplicate lands
 function fakeDom() {
   const make = () => {
     const node = new EventTarget();
-    Object.assign(node, { value: '', textContent: '', disabled: false, setAttribute() {}, setPointerCapture() {} });
+    Object.assign(node, { value: '', textContent: '', disabled: false, dataset: {}, setAttribute() {}, removeAttribute() {}, setPointerCapture() {}, appendChild() {} });
     return node;
   };
-  const nodes = Object.fromEntries(['voice-status', 'object-description', 'voice-record', 'voice-build', 'voice-undo', 'voice-form']
+  const nodes = Object.fromEntries(['voice-tools', 'voice-status', 'object-description', 'voice-record', 'voice-build', 'voice-undo', 'voice-form']
     .map(id => [id, make()]));
   const parent = { appendChild() {} };
   globalThis.document = { getElementById: id => nodes[id], createElement: make, body: parent, head: parent };

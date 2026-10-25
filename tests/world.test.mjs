@@ -48,7 +48,7 @@ test('the cyberpunk preset is backed by the model set in sets.js (its model file
   assert.ok(credits.includes('cyberpunk/'));
   const preset = JSON.parse(await readFile(new URL('../web/presets/cyberpunk/preset.json', import.meta.url), 'utf8'));
   assert.equal(preset.id, 'cyberpunk');
-  await readFile(new URL(`../web/presets/cyberpunk/${preset.thumbnail}`, import.meta.url)); // the card image exists
+  assert.equal(preset.thumbnail, undefined, 'the mirror is rendered from the current world, not the obsolete miniature image');
 });
 
 // ---- floors ----

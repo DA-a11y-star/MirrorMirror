@@ -30,8 +30,8 @@ export const SETS = {
     shadows: { castShadow: false, receiveShadow: false },
     // Night: dark sky, violet haze, cool moonlight and a pink fill, so the model's neon (emissive) materials carry it.
     environment: {
-      background: 0x0a0818, fog: [0x140b2a, 25, 110], hemisphere: [0x9b8cff, 0x2b1a55, 2.0],
-      sun: [0xb8c4ff, 1.6], fill: [0xff5ad8, 1.2], floor: 0x0d0b1a, grid: false,
+      sky: [0x070d22, 0x252448], background: 0x070d22, fog: [0x252448, 25, 110], hemisphere: [0x9cb9e2, 0x232840, 1.35],
+      sun: [0xb8d5ff, 1.15], fill: [0xe961bd, 0.45], floor: 0x0d1421, grid: false,
       floorY: -0.2, // just below the streets, so the plain floor never fights the model's ground
       floorSize: 400, // the plain room's floor is 60 m; enlarged so its edge never shows inside the fog
     },
@@ -52,6 +52,13 @@ export const SETS = {
       // Movable street lamps (9.8 m tall) on the pavement beside the road, about 17-24 m apart, near the blocks (a shared
       // object costs sync traffic and the scene is capped at 64, so only the first area gets them).
       lamps: { gap: 17, max: 24, radius: 70 },
+      // Life (web/ambience.js). Each key switches one effect on; delete it, or set `enabled: false`, to turn it off. (Cars also move.)
+      signs: { count: 60 }, // neon bars, tubes and glyph panels on the walls beside the roads
+      glowPools: {}, // coloured light on the road under each junction light
+      wetStreet: { opacity: 0.34 }, // broken reflections of signs, clipped to the asphalt (one draw call)
+      steam: { count: 6 }, // plumes rising at the road edge
+      holograms: { count: 3 }, // scrolling holographic billboards above the biggest junctions
+      rain: { count: 900 }, // light rain around the viewer
       // Eve is about the avatar's size and hovers; Wall-E (built from primitives, there is no model) is a little smaller.
       // Offsets are from the workspace; both stand west of the blocks facing them.
       eve: { model: 'assets/cyberpunk/eve_from_wall-e.glb', height: 1.5, hover: 0.35, offset: [-2.0, -0.6] },
@@ -97,10 +104,21 @@ export const SETS = {
     shadows: { castShadow: true },
     // A dragon circles above and around the town, wider than its wall (dragon.js): its lowest flight clears the tallest roof (9.2 m) by a few metres.
     dragon: { center: [0, 9], radius: [44, 60], height: [13, 19], speed: 8, tempo: 0.5 }, // tempo 0.5: the whole animation at half speed
-    // Warm afternoon. The model's ground plane was removed, so the room floor shows through the courtyards: packed earth.
+    // A festival at dusk, so the lanterns and fireworks glow: violet sky, warm haze, a low orange sun and a cool fill. The model's
+    // ground plane was removed, so the room floor shows through the courtyards: packed earth.
     environment: {
-      background: 0xb9d6ec, fog: [0xe9e2d4, 45, 130], hemisphere: [0xfff3df, 0x8c7c62, 1.3],
-      sun: [0xfff0d6, 1.7], floor: 0xa89a80, grid: false,
+      sky: [0x292b55, 0xc18d7d], background: 0x292b55, fog: [0xc18d7d, 45, 130], hemisphere: [0xc5bddb, 0x56434a, 1.05],
+      sun: [0xffb779, 1.35], fill: [0xa1acdf, 0.8], floor: 0x6f6050, grid: false,
+      sunPosition: [-5, 4, 7], floorSize: 400,
+    },
+    horizon: { center: [0, 9] },
+    // Life (web/ambience.js). Each key switches one effect on; delete it, or set `enabled: false`, to turn it off.
+    props: {
+      lanterns: { count: 8 }, // smaller lanterns, attached to visible freestanding festival arches
+      floorLanterns: { count: 4, size: 0.65 }, // waist-high lanterns near the blocks, shared and grabbable
+      skyLanterns: { count: 60 }, // warm lanterns drifting up over the town
+      fireworks: { slots: 2, period: 24, per: 65 }, // occasional accents, not a continuous show
+      petals: { count: 90 }, // restrained falling blossom around the viewer
     },
     credit: '"Low poly Chinese city" by smooth998 (https://sketchfab.com/smooth998), CC BY 4.0',
   },
