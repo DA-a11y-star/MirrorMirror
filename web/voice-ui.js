@@ -43,14 +43,7 @@ export class VoiceUI {
     this.cue = document.createElement('div');
     this.cue.id = 'voice-cue';
     this.cue.hidden = true;
-    this.cue.textContent = '🎙 Listening — say “mirror mirror, make a …”';
-    document.body.appendChild(this.cue);
-    const style = document.createElement('style');
-    style.textContent = `#voice-cue { position: fixed; top: 44px; left: 50%; transform: translateX(-50%); z-index: 5; pointer-events: none;
-      font: 600 14px system-ui, sans-serif; color: white; background: #e76f51; padding: 7px 16px; border-radius: 999px;
-      box-shadow: 0 0 0 3px rgba(255,255,255,.7), 0 0 18px #e76f51; animation: voice-pulse 1s ease-in-out infinite; }
-      @keyframes voice-pulse { 50% { opacity: .65; } }`;
-    document.head.appendChild(style);
+    document.getElementById('voice-tools').appendChild(this.cue);
     this.refresh();
   }
 
@@ -116,7 +109,11 @@ export class VoiceUI {
     };
     if (msg.type === 'ready') this.status.textContent = msg.configured
       ? labels.idle : 'Voice service connected. Set MODEL_API_KEY and restart it to build.';
-    if (msg.type === 'offline') this.status.textContent = 'Voice offline — run python -m voice.main. Reconnecting…';
+    if (msg.type === 'offline') {
+      this.status.textContent = 'Voice is reconnecting. You can still build saved library objects.';
+      this.status.title = 'Start the local voice service with: python -m voice.main';
+    }
+    if (msg.type === 'ready') this.status.removeAttribute('title');
     if (msg.type === 'status') {
       this.status.textContent = labels[msg.stage] || msg.stage;
       // The dust cloud swirls from the moment audio is sent until the object (or an error) comes back.
@@ -150,10 +147,11 @@ export class VoiceUI {
     this.build.disabled = voice.busy || voice.recording || voice.starting || (!fromLibrary && (!voice.connected || !voice.configured));
     // Keep the active record button enabled so it keeps pointer capture and receives release.
     this.record.disabled = !voice.connected || !voice.configured || (voice.busy && !voice.recording);
-    this.record.textContent = voice.recording ? '● Release to build' : 'Hold to speak';
+    this.record.textContent = voice.recording ? 'Release to build' : voice.starting ? 'Opening microphone…' : 'Hold to speak';
     this.record.setAttribute('aria-pressed', String(voice.recording));
     this.undo.disabled = !this.objects.history.length;
     this.cue.hidden = !(voice.recording || voice.starting || voice.busy);
-    this.cue.textContent = voice.busy && !voice.recording ? '✨ Building…' : '🎙 Listening — say “mirror mirror, make a …”';
+    this.cue.textContent = voice.busy && !voice.recording ? 'Bringing your idea to life…' : 'Listening — describe what you want to make.';
+    document.getElementById('voice-tools').dataset.state = voice.recording || voice.starting ? 'listening' : voice.busy ? 'building' : 'idle';
   }
 }

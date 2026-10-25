@@ -38,6 +38,7 @@ tracker/
   gaze.py              Replaceable gaze providers (webcam iris features) and the gaze worker thread
 web/
   index.html           Page shell; maps "three" to the vendored copy; gaze controls
+  workspace.css        Workspace panels, voice builder and responsive dark theme
   landing.js           Landing page: preset grid, light/dark toggle, Play (loads main.js with ?preset=<id>)
   landing.css          Landing page styles and light/dark tokens
   panorama.js          Title-screen background: a slow 360° turn inside the selected set's 3D scene
@@ -138,6 +139,8 @@ A set is the world around the blocks: an optional 3D model plus the sky, fog, li
 Open [localhost:8000](http://localhost:8000). `TRACKER_SOURCE = 'websocket'` is the default. The HUD changes from `connecting` / `waiting for camera` to `live`, with tracker Hz. Raise your hands to see the skeletons; thumb-index pinches produce `pinch_start` / `pinch_end` in the HUD.
 
 ### Gaze and grabbing (milestone 4)
+
+The workspace uses the landing page's dark glass theme. **Settings** toggles both the settings panel and the tracking diagnostics (including gaze controls); both start hidden. **Esc** closes them. The joystick readouts stay visible at the bottom center. The compact voice builder stays available at the bottom left, with recording and build progress inside the panel. The object library is at the bottom right.
 
 1. Size and place the browser window the way you'll use it, sit at your normal distance, and click **Calibrate gaze**.
 2. Follow the dot through its nine positions with your eyes, keeping your head comfortably still. Each point captures automatically (about 1.5 s each). **Esc** cancels. If the fit is inconsistent, the status line says why; fix lighting or posture and retry.

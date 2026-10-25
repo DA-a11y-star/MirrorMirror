@@ -77,7 +77,7 @@ export class GestureSettings {
   _build() {
     const root = document.createElement('div');
     root.id = 'gesture-settings';
-    root.innerHTML = `<button id="gs-toggle" aria-expanded="false" title="Gesture settings">⚙ Settings ▾</button><div id="gs-panel" hidden></div>`;
+    root.innerHTML = `<button id="gs-toggle" type="button" aria-expanded="false" aria-pressed="false" aria-controls="gs-panel workspace-debug" title="Show settings and diagnostics"><span aria-hidden="true">⚙</span> Settings <span class="settings-switch" aria-hidden="true"></span></button><div id="gs-panel" hidden><div class="panel-heading"><span class="eyebrow">FINE TUNE YOUR EXPERIENCE</span><h2>Settings</h2></div></div>`;
     const panel = root.querySelector('#gs-panel');
     const help = document.createElement('div');
     help.className = 'gs-help';
@@ -127,11 +127,20 @@ export class GestureSettings {
     };
     panel.appendChild(reset);
     const toggle = root.querySelector('#gs-toggle');
-    toggle.onclick = () => {
-      panel.hidden = !panel.hidden;
-      toggle.setAttribute('aria-expanded', String(!panel.hidden));
-      toggle.textContent = panel.hidden ? '⚙ Settings ▾' : '⚙ Settings ▴';
+    const debug = document.getElementById('workspace-debug');
+    this.setOpen = open => {
+      panel.hidden = !open;
+      if (debug) debug.hidden = !open;
+      toggle.setAttribute('aria-expanded', String(open));
+      toggle.setAttribute('aria-pressed', String(open));
     };
+    toggle.onclick = () => this.setOpen(panel.hidden);
+    window.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && !panel.hidden) {
+        this.setOpen(false);
+        toggle.focus();
+      }
+    });
     document.body.appendChild(root);
     const style = document.createElement('style');
     style.textContent = `

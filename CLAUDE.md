@@ -8,6 +8,8 @@
 - `README.md` holds setup and usage detail. If the two disagree, check the code and fix both.
 
 ## Architecture
+
+Workspace UI polish: `web/workspace.css` reuses the landing page's Rubik font, dark glass surfaces and blue accent. Settings toggles its tuning panel and the diagnostics container together, hidden initially; the optional backtick dev readout lives inside diagnostics. Joystick readouts remain visible at their original bottom-center position. Recording/build progress appears inside the compact voice builder (300px wide, reduced padding and decoration). Settings controls own their keyboard and scroll input. Verified with the voice/movement/gesture Node tests and headless Chrome at desktop and narrow viewport sizes; no scene rendering or world content changed.
 Four pieces. Python does sensing and the model calls, the browser does rendering, and a dumb relay connects the two users.
 
 - **tracker/** (Python): webcam hand tracking, eye tracking, head pose, **static per-frame pose labels** (`open|fist|pinch|other` plus a filtered palm; `classify_pose` in `tracker/gestures.py`), landmark filtering. Temporal gesture machines (mode toggle, joysticks) do **not** live here. Serves a WebSocket on `localhost:8766` that only the local browser reads. Capture runs in its own thread and never blocks.

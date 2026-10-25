@@ -18,7 +18,7 @@ export class Dev {
       background: 'rgba(26,33,46,0.82)', borderRadius: '8px', pointerEvents: 'none', whiteSpace: 'pre', zIndex: 3,
     });
     this.panel.hidden = true;
-    document.body.appendChild(this.panel);
+    (document.getElementById('workspace-debug') ?? document.body).appendChild(this.panel);
 
     this.helpers = new THREE.Group();
     this.helpers.name = 'dev-helpers';
