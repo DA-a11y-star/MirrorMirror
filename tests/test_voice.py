@@ -3,8 +3,10 @@ import copy
 import io
 import json
 import math
+import tempfile
 import unittest
 import wave
+from pathlib import Path
 from unittest.mock import patch
 
 import aiohttp
@@ -14,7 +16,7 @@ from websockets.asyncio.server import serve
 
 from voice.layout import half_extents, resolve
 from voice.main import handle, validate_wav
-from voice.muse import Muse
+from voice.muse import Muse, load_env
 from voice.planner import generate
 
 
@@ -179,15 +181,65 @@ class PipelineTests(unittest.IsolatedAsyncioTestCase):
         await site.start()
         port = site._server.sockets[0].getsockname()[1]
         try:
-            with patch('voice.muse.API_URL', f'http://127.0.0.1:{port}'), patch.dict('os.environ', {"MODEL_API_KEY": "test-key"}):
+            env = Path(tempfile.mkdtemp()) / ".env"
+            env.write_text("MODEL_API_KEY=test-key\n")
+            with patch('voice.muse.API_URL', f'http://127.0.0.1:{port}'), patch.dict('os.environ', {}, clear=True):
                 async with aiohttp.ClientSession() as session:
-                    muse = Muse(session)
+                    muse = Muse(session, env_path=env)
                     text = await muse.transcribe(wav())
                     spec = await generate(muse, text)
                     self.assertEqual(spec["name"], "Blue chair")
                     self.assertEqual(calls[0]["messages"][1]["content"], "A chair")
         finally:
             await runner.cleanup()
+
+
+class EnvFileTests(unittest.TestCase):
+    def write(self, text):
+        path = Path(tempfile.mkdtemp()) / ".env"
+        path.write_text(text)
+        return path
+
+    def test_parses_comments_quotes_export_and_blank_lines(self):
+        path = self.write('# MODEL_API_KEY=old-commented-out\n\nMODEL_API_KEY="abc=123"\nexport ASR_MODEL=\'asr-x\'\n  OBJECT_MODEL = obj-y  \nnot a setting\n')
+        self.assertEqual(load_env(path), {"MODEL_API_KEY": "abc=123", "ASR_MODEL": "asr-x", "OBJECT_MODEL": "obj-y"})
+
+    def test_missing_file_is_empty_not_an_error(self):
+        self.assertEqual(load_env(Path(tempfile.mkdtemp()) / "nope"), {})
+
+    def test_key_comes_from_the_env_file_which_beats_the_terminal(self):
+        muse = Muse(None, env_path=self.write("MODEL_API_KEY=from-file\n"))
+        with patch.dict('os.environ', {"MODEL_API_KEY": "from-terminal"}):
+            self.assertEqual(muse.key, "from-file")
+
+    def test_terminal_variable_is_only_a_fallback(self):
+        muse = Muse(None, env_path=self.write("# no key here\n"))
+        with patch.dict('os.environ', {"MODEL_API_KEY": "from-terminal"}):
+            self.assertEqual(muse.key, "from-terminal")
+        with patch.dict('os.environ', {}, clear=True):
+            self.assertEqual(muse.key, "")
+
+    def test_editing_the_file_takes_effect_without_a_restart(self):
+        path = self.write("")
+        muse = Muse(None, env_path=path)
+        with patch.dict('os.environ', {}, clear=True):
+            self.assertEqual(muse.key, "")
+            path.write_text("MODEL_API_KEY=added-later\n")
+            self.assertEqual(muse.key, "added-later")
+
+    def test_model_ids_can_be_overridden_in_the_file(self):
+        muse = Muse(None, env_path=self.write("OBJECT_MODEL=custom-model\n"))
+        with patch.dict('os.environ', {}, clear=True):
+            self.assertEqual(muse.setting("OBJECT_MODEL", "muse-wonder-1.0"), "custom-model")
+            self.assertEqual(muse.setting("ASR_MODEL", "muse-voice-transcribe-1.0"), "muse-voice-transcribe-1.0")
+
+    def test_missing_key_error_points_at_the_env_file(self):
+        async def run():
+            muse = Muse(None, env_path=self.write(""))
+            with patch.dict('os.environ', {}, clear=True):
+                with self.assertRaisesRegex(ValueError, r"\.env"):
+                    await muse.post("/x")
+        asyncio.run(run())
 
 
 if __name__ == '__main__':

@@ -197,11 +197,11 @@ Install the updated dependencies, then run the voice service in a **third termin
 
 ```bash
 .venv/bin/python -m pip install -r requirements.txt
-export MODEL_API_KEY="<your Meta Model API key>"
+cp .env.example .env        # then put your Meta Model API key in .env
 .venv/bin/python -m voice.main
 ```
 
-The key is read only by Python and is never sent to the browser. Keep it out of `web/config.js` and Git. `.env` files are ignored, but **not loaded automatically**; export the variable in the service terminal. Restart the service after changing it.
+The key is read only by Python and is never sent to the browser. Keep it out of `web/config.js` and Git. Put the key in a `.env` file in the project folder (copy `.env.example`): `MODEL_API_KEY=...`. `.env` is git-ignored, so it never gets committed; only `.env.example`, which holds a placeholder, is tracked. The voice service re-reads `.env` on every request, so editing it takes effect without a restart. A variable exported in the terminal still works as a fallback, but the file wins. `ASR_MODEL` and `OBJECT_MODEL` can be set in `.env` too.
 
 Open `http://localhost:8000` (or `http://127.0.0.1:8000`). The voice service accepts these browser origins and binds only to localhost. It reconnects automatically if you start it after opening the page. Tracker inference remains independent of all model requests.
 

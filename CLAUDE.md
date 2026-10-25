@@ -48,8 +48,9 @@ pip install -r requirements.txt            # once per laptop (includes aiohttp, 
 python relay/relay.py                      # laptop A only (--host / --port available)
 python tracker/main.py                     # each laptop (--gaze none skips the face model)
 cd web && python -m http.server 8000       # laptop A; laptop B can open A's server instead
-MODEL_API_KEY=... python -m voice.main     # only on a laptop that generates objects
+python -m voice.main                       # only on a laptop that generates objects; key comes from .env
 ```
+- **API key:** copy `.env.example` to `.env` and set `MODEL_API_KEY` there. `.env` is git-ignored (never commit it) and is re-read on every request, so edits need no restart. A terminal variable still works as a fallback; the file wins.
 - Laptop A opens `http://localhost:8000`. Laptop B opens `http://<A's address>:8000/?user=B` and runs only its own tracker. Find A's address with `ipconfig getifaddr en0`.
 - `web/config.js` holds `USER_ID`, `HOST_ID`, `RELAY_URL`, `TRACKER_URL`, `VOICE_URL`, screen size in meters (for the depth effect), `PARALLAX_STRENGTH`, `DEV_ORBIT`. `user`, `relay` and `tracker` can be overridden in the page URL (`?user=B&relay=ws://localhost:8765&tracker=mock`). **No IP address is hard-coded**: the relay is looked up on the machine that served the page.
 - One laptop, two users: open two browser **windows** (not tabs: a background tab stops rendering and sending). Arrow keys move only the window you last clicked.
