@@ -42,6 +42,13 @@ tracker/
   gaze.py              Replaceable gaze providers (webcam iris features) and the gaze worker thread
 web/
   index.html           Page shell; maps "three" to the vendored copy; gaze controls
+  landing.js           Landing page: preset grid, light/dark toggle, Play (loads main.js with ?preset=<id>)
+  landing.css          Landing page styles and light/dark tokens
+  panorama.js          Title-screen background: a slow 360° turn inside the selected set's 3D scene
+  set-scene.js         Builds a preset's scene (sky, lights, landmarks, random props) from primitives
+  set-layout.js        Random prop placement (pure functions, tested)
+  presets.js           Preset file format, validation and registry loader (shared with future imports)
+  presets/             index.json registry plus one folder per preset (preset.json)
   config.js            Per-laptop settings (user ID, URLs, screen size, tracker and gaze source)
   main.js              Render loop, tracker and relay message handling, HUD
   tracker.js           Local WebSocket client, validation, reconnect and stale-feed timeout

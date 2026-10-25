@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Eye Tracking Hard and Soft</title>
+  <title>Mirror Mirror</title>
   <style>
     html, body { margin: 0; height: 100%; overflow: hidden; background: #d9dde3; }
     canvas { display: block; }
@@ -51,45 +51,77 @@
     #voice-status { margin-top: 8px; }
     [hidden] { display: none !important; }
   </style>
+  <link rel="stylesheet" href="./landing.css">
   <script type="importmap">
     { "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/" } }
   </script>
 </head>
 <body>
-  <div id="hud"></div>
-  <div id="tools">
-    <label for="gaze-source">Gaze</label>
-    <select id="gaze-source">
-      <option value="webcam">Webcam eyes</option>
-      <option value="external">External eye tracker</option>
-      <option value="pointer">Pointer (development)</option>
-    </select>
-    <button id="calibrate">Calibrate gaze</button>
-    <div id="gaze-status" role="status">Starting gaze input…</div>
-    <div class="hint">Look at a block → pinch to grab → move your hand → release to place.</div>
-    <div class="hint">Move: ↑↓ walk · ←→ turn · A/D strafe · F fly (Space/Shift up/down) · V view · C free cam · P depth · R respawn · ` dev. Click the scene to mouse-look (Esc releases).</div>
-  </div>
-  <div id="gaze-reticle" hidden></div>
-  <section id="voice-tools" aria-label="Voice object creation">
-    <strong>Build with your voice</strong>
-    <form id="voice-form">
-      <input id="object-description" aria-label="Object description" maxlength="2000" placeholder="A blue chair with wooden legs" autocomplete="off">
-      <button id="voice-build" type="submit" disabled>Build</button>
-    </form>
-    <button id="voice-record" type="button" aria-pressed="false" disabled>Hold to speak</button>
-    <button id="voice-undo" type="button" disabled>Undo creation</button>
-    <div id="voice-status" role="status" aria-live="polite">Connecting to local voice service…</div>
-    <div class="hint">Simple shapes assembled by Muse Wonder. Look → pinch to move the whole object.</div>
-  </section>
-  <div id="calibration" hidden>
-    <div id="calibration-copy">
-      <strong>Webcam gaze calibration</strong>
-      <p id="calibration-instruction">Look at the dot</p>
+  <div id="landing">
+    <div id="landing-bg" aria-hidden="true"></div>
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+      <defs>
+        <linearGradient id="silver" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#c8ced6"/><stop offset=".45" stop-color="#aab1bb"/><stop offset=".75" stop-color="#8e96a1"/><stop offset="1" stop-color="#aeb5be"/>
+        </linearGradient>
+      </defs>
+    </svg>
+    <div class="landing-title">
+      <h1>Mirror Mirror</h1>
+      <span class="title-reflection" aria-hidden="true">Mirror Mirror</span>
+      <p class="tagline">A shared world you build together with your eyes, hands and voice.</p>
     </div>
-    <div id="calibration-hint">Keep your head comfortably still and follow the dot with your eyes. Each point captures automatically.</div>
-    <button id="cancel-calibration">Cancel (Esc)</button>
-    <div id="calibration-dot"></div>
+    <main class="landing-main">
+      <div id="preset-grid" role="group" aria-label="Sets">
+        <p class="preset-message">Loading sets…</p>
+      </div>
+      <p id="preset-status" class="visually-hidden" role="status" aria-live="polite"></p>
+    </main>
+    <footer class="landing-bottom">
+      <div id="landing-who" class="who"></div>
+      <button id="play" type="button" disabled>
+        <span class="play-icon" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M5 3.2v13.6L16.4 10z" fill="currentColor"/></svg></span>
+        <span class="play-text"><span class="play-label">Play</span><span class="play-sub">Choose a set first</span></span>
+      </button>
+    </footer>
   </div>
-  <script type="module" src="./main.js"></script>
+  <!-- The workspace UI stays hidden (and main.js unloaded) until Play. -->
+  <div id="workspace-ui" hidden>
+    <div id="hud"></div>
+    <div id="tools">
+      <label for="gaze-source">Gaze</label>
+      <select id="gaze-source">
+        <option value="webcam">Webcam eyes</option>
+        <option value="external">External eye tracker</option>
+        <option value="pointer">Pointer (development)</option>
+      </select>
+      <button id="calibrate">Calibrate gaze</button>
+      <div id="gaze-status" role="status">Starting gaze input…</div>
+      <div class="hint">Look at a block → pinch to grab → move your hand → release to place.</div>
+      <div class="hint">Move: ↑↓ walk · ←→ turn · A/D strafe · F fly (Space/Shift up/down) · V view · C free cam · P depth · R respawn · ` dev. Click the scene to mouse-look (Esc releases).</div>
+    </div>
+    <div id="gaze-reticle" hidden></div>
+    <section id="voice-tools" aria-label="Voice object creation">
+      <strong>Build with your voice</strong>
+      <form id="voice-form">
+        <input id="object-description" aria-label="Object description" maxlength="2000" placeholder="A blue chair with wooden legs" autocomplete="off">
+        <button id="voice-build" type="submit" disabled>Build</button>
+      </form>
+      <button id="voice-record" type="button" aria-pressed="false" disabled>Hold to speak</button>
+      <button id="voice-undo" type="button" disabled>Undo creation</button>
+      <div id="voice-status" role="status" aria-live="polite">Connecting to local voice service…</div>
+      <div class="hint">Simple shapes assembled by Muse Wonder. Look → pinch to move the whole object.</div>
+    </section>
+    <div id="calibration" hidden>
+      <div id="calibration-copy">
+        <strong>Webcam gaze calibration</strong>
+        <p id="calibration-instruction">Look at the dot</p>
+      </div>
+      <div id="calibration-hint">Keep your head comfortably still and follow the dot with your eyes. Each point captures automatically.</div>
+      <button id="cancel-calibration">Cancel (Esc)</button>
+      <div id="calibration-dot"></div>
+    </div>
+  </div>
+  <script type="module" src="./landing.js"></script>
 </body>
 </html>

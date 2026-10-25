@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { DEV_ORBIT, GAZE_SOURCE, HOST_ID, PARALLAX_STRENGTH, RELAY_URL, TRACKER_SOURCE, TRACKER_URL, USER_ID, VOICE_URL } from './config.js';
+import { currentPreset, DEV_ORBIT, GAZE_SOURCE, HOST_ID, PARALLAX_STRENGTH, RELAY_URL, TRACKER_SOURCE, TRACKER_URL, USER_ID, VOICE_URL } from './config.js';
 import { RemoteAvatar } from './remote-avatar.js';
 import { OffAxis } from './offaxis.js';
 import { Hands } from './hands.js';
@@ -37,7 +37,9 @@ const sync = new SceneSync(blocks, { userId: USER_ID, hostId: HOST_ID, objects }
 const peers = new Map(); // user id -> RemoteAvatar
 const heldIds = () => new Set([...interaction.grabs.values()].map(grab => grab.mesh.userData.id));
 const voiceUI = new VoiceUI(VOICE_URL, objects);
-window.app = { renderer, scene, camera, view, hands, blocks, interaction, gaze, gazeUI, offAxis, sync, peers, objects, voiceUI }; // dev console
+// The landing page's choice. Nothing consumes it yet; sets (CLAUDE.md, planned work B) will build from it.
+const presetId = currentPreset();
+window.app = { renderer, scene, camera, view, hands, blocks, interaction, gaze, gazeUI, offAxis, sync, peers, objects, voiceUI, presetId }; // dev console
 
 // Avatar, camera rig and input. Keys and mouse are read only in input.js; everything below consumes intents.
 const input = new Input(renderer.domElement);
@@ -204,7 +206,7 @@ renderer.setAnimationLoop(() => {
     const others = [...peers.values()].filter(peer => peer.live).map(peer => peer.user).join(', ');
     const link = `${net.status}${net.open ? (others ? ` with ${others}` : '') : ` ${RELAY_URL}`}`; // a wrong address shows here
     const infer = tracker.frame?.infer_ms != null ? ` (${tracker.frame.infer_ms} ms)` : '';
-    hud.textContent = `user ${USER_ID}  ·  ${fps} fps  ·  tracker ${tracker.status} ${trackerHz} Hz${infer}  ·  relay ${link}  ·  ${parallax}  ·  ${tracker.lastGesture}  ·  ${interaction.lastEnd}`;
+    hud.textContent = `user ${USER_ID}${presetId ? `  ·  set ${presetId}` : ''}  ·  ${fps} fps  ·  tracker ${tracker.status} ${trackerHz} Hz${infer}  ·  relay ${link}  ·  ${parallax}  ·  ${tracker.lastGesture}  ·  ${interaction.lastEnd}`;
     frames = 0;
     tracker.frames = 0;
     lastHud = now;

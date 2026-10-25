@@ -1,0 +1,115 @@
+{
+  "format": "mirrormirror.preset",
+  "version": 1,
+  "id": "workshop",
+  "name": "Workshop",
+  "description": "A maker yard: workbenches, lumber and stacks of blocks.",
+  "tint": "#e76f51",
+  "view": {"yaw": 0, "pitch": 2},
+  "environment": {
+    "sky": ["#7fb0e6", "#ffe3c2"],
+    "fog": ["#f4dfc6", 20, 80],
+    "ground": "#9fb36f",
+    "sun": {"color": "#ffdcaa", "intensity": 2.5, "position": [8, 7, 5]},
+    "ambient": ["#dce8ff", "#8a7a5a", 1.1]
+  },
+  "objects": {
+    "deck": [
+      {"shape": "box", "size": [16, 0.3, 16], "pos": [0, 0.15, 0], "color": "#c49a6c"},
+      {"shape": "box", "size": [16.4, 0.34, 0.4], "pos": [0, 0.17, 8], "color": "#9c6a3c"},
+      {"shape": "box", "size": [16.4, 0.34, 0.4], "pos": [0, 0.17, -8], "color": "#9c6a3c"},
+      {"shape": "box", "size": [0.4, 0.34, 16.4], "pos": [8, 0.17, 0], "color": "#9c6a3c"},
+      {"shape": "box", "size": [0.4, 0.34, 16.4], "pos": [-8, 0.17, 0], "color": "#9c6a3c"},
+      {"shape": "box", "size": [0.06, 0.31, 16], "pos": [-5.4, 0.16, 0], "color": "#b08658"},
+      {"shape": "box", "size": [0.06, 0.31, 16], "pos": [-2.7, 0.16, 0], "color": "#b08658"},
+      {"shape": "box", "size": [0.06, 0.31, 16], "pos": [0, 0.16, 0], "color": "#b08658"},
+      {"shape": "box", "size": [0.06, 0.31, 16], "pos": [2.7, 0.16, 0], "color": "#b08658"},
+      {"shape": "box", "size": [0.06, 0.31, 16], "pos": [5.4, 0.16, 0], "color": "#b08658"}
+    ],
+    "barn": [
+      {"shape": "box", "size": [12, 7, 9], "pos": [0, 3.5, 0], "color": "#c8553d", "pattern": {"type": "windows", "rows": 2, "cols": 5, "lit": 0.5, "color": "#5a2a20", "glow": "#ffd9a0"}},
+      {"shape": "cylinder", "size": [10.4, 12, 4.2], "pos": [0, 8.05, 0], "color": "#c8553d", "rot": [-90, 0, 90], "sides": 3},
+      {"shape": "box", "size": [12.8, 0.4, 6.4], "pos": [0, 8.6, 2.25], "color": "#6b4a3a", "rot": [35, 0, 0]},
+      {"shape": "box", "size": [12.8, 0.4, 6.4], "pos": [0, 8.6, -2.25], "color": "#6b4a3a", "rot": [-35, 0, 0]},
+      {"shape": "box", "size": [3.4, 4.4, 0.2], "pos": [0, 2.2, 4.56], "color": "#7a3226"},
+      {"shape": "box", "size": [3.8, 0.3, 0.26], "pos": [0, 4.5, 4.58], "color": "#f3ead8"},
+      {"shape": "box", "size": [0.16, 4.4, 0.24], "pos": [0, 2.2, 4.62], "color": "#f3ead8"},
+      {"shape": "box", "size": [12.2, 0.3, 9.2], "pos": [0, 0.15, 0], "color": "#8a7a6a"}
+    ],
+    "workbench": [
+      {"shape": "box", "size": [2.2, 0.12, 1], "pos": [0, 0.92, 0], "color": "#c98a4b"},
+      {"shape": "box", "size": [2, 0.06, 0.8], "pos": [0, 0.3, 0], "color": "#a9703f"},
+      {"shape": "box", "size": [0.12, 0.9, 0.12], "pos": [-1, 0.45, -0.4], "color": "#8a5a33"},
+      {"shape": "box", "size": [0.12, 0.9, 0.12], "pos": [-1, 0.45, 0.4], "color": "#8a5a33"},
+      {"shape": "box", "size": [0.12, 0.9, 0.12], "pos": [1, 0.45, -0.4], "color": "#8a5a33"},
+      {"shape": "box", "size": [0.12, 0.9, 0.12], "pos": [1, 0.45, 0.4], "color": "#8a5a33"},
+      {"shape": "box", "size": [0.3, 0.25, 0.3], "pos": [0.85, 1.1, 0.3], "color": "#5b6475"},
+      {"shape": "box", "size": [0.6, 0.3, 0.3], "pos": [-0.5, 1.13, -0.1], "color": "#e76f51"}
+    ],
+    "crates": [
+      {"shape": "box", "size": [1, 1, 1], "pos": [0, 0.5, 0], "color": "#c98a4b"},
+      {"shape": "box", "size": [1.04, 0.12, 1.04], "pos": [0, 0.94, 0], "color": "#9c6a3c"},
+      {"shape": "box", "size": [1.04, 0.12, 1.04], "pos": [0, 0.06, 0], "color": "#9c6a3c"},
+      {"shape": "box", "size": [0.14, 1.02, 1.04], "pos": [0, 0.5, 0], "color": "#9c6a3c"},
+      {"shape": "box", "size": [1, 1, 1], "pos": [1.06, 0.5, 0.12], "color": "#c98a4b"},
+      {"shape": "box", "size": [1.04, 0.12, 1.04], "pos": [1.06, 0.94, 0.12], "color": "#9c6a3c"},
+      {"shape": "box", "size": [1.04, 0.12, 1.04], "pos": [1.06, 0.06, 0.12], "color": "#9c6a3c"},
+      {"shape": "box", "size": [0.14, 1.02, 1.04], "pos": [1.06, 0.5, 0.12], "color": "#9c6a3c"},
+      {"shape": "box", "size": [1, 1, 1], "pos": [0.5, 1.5, 0.05], "color": "#c98a4b"},
+      {"shape": "box", "size": [1.04, 0.12, 1.04], "pos": [0.5, 1.94, 0.05], "color": "#9c6a3c"},
+      {"shape": "box", "size": [1.04, 0.12, 1.04], "pos": [0.5, 1.06, 0.05], "color": "#9c6a3c"},
+      {"shape": "box", "size": [0.14, 1.02, 1.04], "pos": [0.5, 1.5, 0.05], "color": "#9c6a3c"}
+    ],
+    "blocks": [
+      {"shape": "box", "size": [0.8, 0.8, 0.8], "pos": [0, 0.4, 0], "color": "#e76f51"},
+      {"shape": "box", "size": [0.8, 0.8, 0.8], "pos": [0.86, 0.4, 0.12], "color": "#2a9d8f"},
+      {"shape": "box", "size": [0.8, 0.8, 0.8], "pos": [0.42, 1.2, 0.05], "color": "#4c6ef5"},
+      {"shape": "box", "size": [0.6, 0.6, 0.6], "pos": [-0.8, 0.3, -0.35], "color": "#e9c46a"},
+      {"shape": "box", "size": [1.8, 0.16, 0.45], "pos": [0.5, 1.68, 0], "color": "#f4a261"}
+    ],
+    "sawhorse": [
+      {"shape": "box", "size": [1.6, 0.14, 0.14], "pos": [0, 0.82, 0], "color": "#c98a4b"},
+      {"shape": "box", "size": [0.1, 0.86, 0.1], "pos": [-0.62, 0.4, -0.16], "color": "#a9703f", "rot": [0, 0, -12]},
+      {"shape": "box", "size": [0.1, 0.86, 0.1], "pos": [-0.62, 0.4, 0.16], "color": "#a9703f", "rot": [0, 0, -12]},
+      {"shape": "box", "size": [0.1, 0.86, 0.1], "pos": [0.62, 0.4, -0.16], "color": "#a9703f", "rot": [0, 0, 12]},
+      {"shape": "box", "size": [0.1, 0.86, 0.1], "pos": [0.62, 0.4, 0.16], "color": "#a9703f", "rot": [0, 0, 12]}
+    ],
+    "barrel": [
+      {"shape": "cylinder", "size": [0.8, 1.1, 0.8], "pos": [0, 0.55, 0], "color": "#8a5a33", "sides": 12},
+      {"shape": "cylinder", "size": [0.84, 0.08, 0.84], "pos": [0, 0.2, 0], "color": "#4a4f5c", "sides": 12},
+      {"shape": "cylinder", "size": [0.84, 0.08, 0.84], "pos": [0, 0.9, 0], "color": "#4a4f5c", "sides": 12}
+    ],
+    "lumber": [
+      {"shape": "box", "size": [3, 0.12, 0.3], "pos": [0, 0.06, -0.35], "color": "#dca46a"},
+      {"shape": "box", "size": [3, 0.12, 0.3], "pos": [0, 0.06, 0], "color": "#c98a4b"},
+      {"shape": "box", "size": [3, 0.12, 0.3], "pos": [0, 0.06, 0.35], "color": "#dca46a"},
+      {"shape": "box", "size": [3, 0.12, 0.3], "pos": [0, 0.18, -0.18], "color": "#c98a4b"},
+      {"shape": "box", "size": [3, 0.12, 0.3], "pos": [0, 0.18, 0.18], "color": "#dca46a"}
+    ],
+    "fence": [
+      {"shape": "cylinder", "size": [0.14, 1.1, 0.14], "pos": [-1.5, 0.55, 0], "color": "#efe4cf", "sides": 6},
+      {"shape": "cylinder", "size": [0.14, 1.1, 0.14], "pos": [1.5, 0.55, 0], "color": "#efe4cf", "sides": 6},
+      {"shape": "box", "size": [3.1, 0.1, 0.08], "pos": [0, 0.45, 0], "color": "#efe4cf"},
+      {"shape": "box", "size": [3.1, 0.1, 0.08], "pos": [0, 0.85, 0], "color": "#efe4cf"}
+    ],
+    "tree": [
+      {"shape": "cylinder", "size": [0.5, 2.2, 0.5], "pos": [0, 1.1, 0], "color": "#6b4a2e", "sides": 7},
+      {"shape": "sphere", "size": [3.6, 3, 3.4], "pos": [0, 3.4, 0], "color": "#4e7a3a", "sides": 7},
+      {"shape": "sphere", "size": [2.4, 2, 2.4], "pos": [0.9, 4.2, 0.5], "color": "#5b8a45", "sides": 7}
+    ],
+    "lamp": [
+      {"shape": "cylinder", "size": [0.35, 0.3, 0.35], "pos": [0, 0.15, 0], "color": "#3b3f4a", "sides": 8},
+      {"shape": "cylinder", "size": [0.14, 3.6, 0.14], "pos": [0, 1.8, 0], "color": "#3b3f4a", "sides": 8},
+      {"shape": "sphere", "size": [0.48, 0.48, 0.48], "pos": [0, 3.75, 0], "color": "#fff3d6", "emissive": "#ffd890", "sides": 8}
+    ]
+  },
+  "place": [
+    {"object": "deck", "pos": [0, 0, 0], "clear": 11.5},
+    {"object": "barn", "pos": [0, 0, -31], "yaw": -8, "clear": 9}
+  ],
+  "scatter": [
+    {"objects": ["workbench", "workbench", "crates", "blocks", "blocks", "sawhorse", "barrel", "lumber"], "count": [6, 8], "radius": [2.6, 6.6], "y": 0.3, "spacing": 2.7},
+    {"objects": ["crates", "barrel", "lumber", "blocks", "sawhorse", "fence", "fence", "lamp"], "count": [12, 18], "radius": [12, 24], "spacing": 3.2},
+    {"objects": ["tree"], "count": [12, 18], "radius": [18, 46], "scale": [0.9, 1.6], "spacing": 5.5}
+  ]
+}

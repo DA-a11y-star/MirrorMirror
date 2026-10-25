@@ -3,6 +3,9 @@
 const params = new URLSearchParams(globalThis.location?.search);
 
 export const USER_ID = params.get('user') ?? 'A'; // 'A' or 'B'
+// The preset chosen on the landing page (?preset=<id>), or null. A function, not a constant: the landing page loads
+// this module before Play writes the choice into the URL.
+export const currentPreset = () => new URLSearchParams(globalThis.location?.search).get('preset');
 export const HOST_ID = 'A'; // laptop A is the scene authority
 // The relay runs on laptop A. By default a page looks for it on the machine that served the page, so A finds it at
 // localhost, and B finds it too if B opens A's web server (http://<A's address>:8000/?user=B). Otherwise pass
